@@ -13,7 +13,13 @@ const ModelStatus = () => {
         await loadModel();
         const info = getModelInfo();
         setModelInfo(info);
-        setStatus("loaded");
+        
+        // Check if model actually loaded
+        if (info && info.loaded) {
+          setStatus("loaded");
+        } else {
+          setStatus("error");
+        }
       } catch (error) {
         console.error("Failed to load model:", error);
         setStatus("error");
@@ -34,9 +40,9 @@ const ModelStatus = () => {
 
   if (status === "error") {
     return (
-      <Badge variant="outline" className="bg-destructive/10 text-destructive-foreground border-destructive/30">
+      <Badge variant="outline" className="bg-warning/10 text-warning-foreground border-warning/30">
         <AlertCircle className="w-3 h-3 mr-1" />
-        Model Error
+        Fallback Mode
       </Badge>
     );
   }
