@@ -1,16 +1,15 @@
 /**
  * TensorFlow.js Model Inference for Baby Cry Detection
- * Loads the TFLite model and performs inference
+ * Loads the Keras H5 model and performs inference
  */
 
 import * as tf from '@tensorflow/tfjs';
-import { loadTFLiteModel } from '@tensorflow/tfjs-tflite';
 
-let model: any = null;
+let model: tf.LayersModel | null = null;
 let isModelLoading = false;
 
 /**
- * Load the TFLite model
+ * Load the Keras H5 model
  */
 export async function loadModel(): Promise<void> {
   if (model) {
@@ -29,10 +28,13 @@ export async function loadModel(): Promise<void> {
     isModelLoading = true;
     console.log('Loading baby cry detection model...');
     
-    // Load TFLite model
-    model = await loadTFLiteModel('/models/baby_cry_detector.tflite');
+    // Load Keras H5 model using TensorFlow.js
+    model = await tf.loadLayersModel('/models/baby_cry_detector.h5/model.json');
     
     console.log('Model loaded successfully');
+    console.log('Input shape:', model.inputs[0].shape);
+    console.log('Output shape:', model.outputs[0].shape);
+    
     isModelLoading = false;
   } catch (error) {
     isModelLoading = false;
@@ -92,7 +94,7 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
     const inputTensor = prepareModelInput(audioData);
     
     // Run inference
-    const output = model.predict(inputTensor) as tf.Tensor;
+    const output = model!.predict(inputTensor) as tf.Tensor;
     const predictions = await output.data();
     
     // Clean up tensors
@@ -100,18 +102,29 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
     output.dispose();
 
     // Binary classification output
-    // predictions[0] should be probability of "cry" class
-    const cryProbability = predictions[0];
-    const noCryProbability = 1 - cryProbability;
+    // For sigmoid output: predictions[0] is probability of "cry" class
+    // For softmax output: predictions[0] = no_cry, predictions[1] = cry
+    let cryProbability: number;
+    let noCryProbability: number;
+    
+    if (predictions.length === 1) {
+      // Sigmoid output (single value)
+      cryProbability = predictions[0];
+      noCryProbability = 1 - cryProbability;
+    } else {
+      // Softmax output (two values: [no_cry, cry])
+      noCryProbability = predictions[0];
+      cryProbability = predictions[1];
+    }
     
     const isCrying = cryProbability > 0.5;
     const confidence = Math.max(cryProbability, noCryProbability);
 
     console.log('Inference result:', {
       isCrying,
-      confidence: confidence * 100,
-      cryProb: cryProbability * 100,
-      noCryProb: noCryProbability * 100,
+      confidence: (confidence * 100).toFixed(1) + '%',
+      cryProb: (cryProbability * 100).toFixed(1) + '%',
+      noCryProb: (noCryProbability * 100).toFixed(1) + '%',
     });
 
     return {
