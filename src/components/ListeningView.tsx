@@ -1,26 +1,101 @@
 import { motion } from "framer-motion";
-import { Mic, X } from "lucide-react";
+import { Mic, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect } from "react";
+import { recordAudio, audioBufferToFloat32Array, normalizeAudio, hasSignificantAudio } from "@/lib/audioProcessing";
+import { detectCry, loadModel } from "@/lib/modelInference";
+import { toast } from "sonner";
 
 interface ListeningViewProps {
   onCancel: () => void;
+  onDetectionComplete: (isCrying: boolean, confidence: number) => void;
 }
 
-const ListeningView = ({ onCancel }: ListeningViewProps) => {
+const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) => {
   const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<string>("Initializing...");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) return 100;
-        return prev + 2;
-      });
-    }, 60);
-
-    return () => clearInterval(interval);
+    startDetection();
   }, []);
+
+  const startDetection = async () => {
+    try {
+      // Phase 1: Load model
+      setStatus("Loading AI model...");
+      setProgress(10);
+      await loadModel();
+      
+      // Phase 2: Request microphone access
+      setStatus("Accessing microphone...");
+      setProgress(20);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Phase 3: Start recording
+      setStatus("Listening to baby...");
+      setProgress(30);
+      
+      const recording = await recordAudio(4000); // 4 seconds
+      
+      // Simulate progress during recording
+      const recordingInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 70) {
+            clearInterval(recordingInterval);
+            return 70;
+          }
+          return prev + 2;
+        });
+      }, 50);
+      
+      // Wait for recording to complete
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      clearInterval(recordingInterval);
+      
+      // Phase 4: Process audio
+      setStatus("Processing audio...");
+      setProgress(75);
+      setIsProcessing(true);
+      
+      const audioData = audioBufferToFloat32Array(recording.audioBuffer);
+      const normalizedAudio = normalizeAudio(audioData);
+      
+      // Check if audio has significant content
+      if (!hasSignificantAudio(normalizedAudio)) {
+        toast.error("No audio detected. Please try again in a quieter environment.");
+        onCancel();
+        return;
+      }
+      
+      // Phase 5: Run ML inference
+      setStatus("Analyzing cry pattern...");
+      setProgress(85);
+      
+      const result = await detectCry(normalizedAudio);
+      
+      // Phase 6: Complete
+      setProgress(100);
+      setStatus("Analysis complete!");
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Return results
+      onDetectionComplete(result.isCrying, result.confidence);
+      
+    } catch (error: any) {
+      console.error('Detection error:', error);
+      
+      if (error.message?.includes('microphone') || error.message?.includes('permission')) {
+        toast.error("Microphone access denied. Please enable microphone permissions in your browser settings.");
+      } else {
+        toast.error("Failed to analyze audio. Please try again.");
+      }
+      
+      onCancel();
+    }
+  };
 
   return (
     <motion.div
@@ -94,7 +169,7 @@ const ListeningView = ({ onCancel }: ListeningViewProps) => {
             animate={{ y: 0, opacity: 1 }}
             className="text-3xl font-bold"
           >
-            Listening...
+            {isProcessing ? "Analyzing..." : "Listening..."}
           </motion.h2>
           <motion.p
             initial={{ y: 20, opacity: 0 }}
@@ -102,7 +177,7 @@ const ListeningView = ({ onCancel }: ListeningViewProps) => {
             transition={{ delay: 0.1 }}
             className="text-muted-foreground text-lg"
           >
-            Hold your phone near your baby
+            {status}
           </motion.p>
         </div>
 
@@ -110,10 +185,25 @@ const ListeningView = ({ onCancel }: ListeningViewProps) => {
         <div className="space-y-3">
           <Progress value={progress} className="h-3" />
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Analyzing cry pattern...</span>
+            <span>{status}</span>
             <span>{Math.round(progress)}%</span>
           </div>
         </div>
+
+        {/* Microphone Permission Info */}
+        {progress < 30 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-accent/10 rounded-xl p-4 border border-accent/20 flex items-start gap-3"
+          >
+            <AlertCircle className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-muted-foreground">
+              <p className="font-semibold text-foreground mb-1">Microphone Access Required</p>
+              <p>Please allow microphone access when prompted by your browser.</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Visual Sound Waves */}
         <div className="flex justify-center items-center gap-2 h-20">
