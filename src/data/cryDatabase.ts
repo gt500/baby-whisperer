@@ -198,7 +198,23 @@ export const cryDatabase: CryType[] = [
     ]
   },
   
-  // Fussy & Attention
+  // Fussy
+  {
+    id: "general-fussy",
+    name: "General Fussy Cry",
+    category: "fussy",
+    audioPattern: "On-and-off whining, not intense",
+    intensity: "low",
+    description: "General fussiness without clear cause. Baby is uncomfortable but not in distress.",
+    solutions: [
+      "Check basic needs (diaper, temperature, hunger)",
+      "Offer comfort through holding or rocking",
+      "Try different positions",
+      "Sometimes babies just need to fuss - stay calm"
+    ]
+  },
+  
+  // Attention
   {
     id: "bored",
     name: "Bored/Lonely Cry",
