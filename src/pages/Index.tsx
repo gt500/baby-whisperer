@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import ListeningView from "@/components/ListeningView";
 import ResultsView from "@/components/ResultsView";
 import DatabaseView from "@/components/DatabaseView";
+import ModelStatus from "@/components/ModelStatus";
 import { CryType, cryDatabase } from "@/data/cryDatabase";
 
 type AppState = "home" | "listening" | "results" | "database" | "about";
@@ -15,14 +16,21 @@ const Index = () => {
 
   const startListening = () => {
     setAppState("listening");
-    
-    // Simulate detection after 3 seconds
-    setTimeout(() => {
-      // Randomly select a cry for demo
-      const randomCry = cryDatabase[Math.floor(Math.random() * cryDatabase.length)];
-      setDetectedCry(randomCry);
-      setAppState("results");
-    }, 3000);
+  };
+
+  const handleDetectionComplete = (isCrying: boolean, confidence: number) => {
+    if (!isCrying) {
+      // No cry detected
+      setAppState("home");
+      // You could show a message here
+      return;
+    }
+
+    // Cry detected! For now, simulate type classification
+    // In production, you'd need a multi-class model for the 17 types
+    const randomCry = cryDatabase[Math.floor(Math.random() * cryDatabase.length)];
+    setDetectedCry(randomCry);
+    setAppState("results");
   };
 
   const resetToHome = () => {
@@ -60,10 +68,18 @@ const Index = () => {
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.3 }}
-                className="text-muted-foreground text-lg"
+                className="text-muted-foreground text-lg mb-3"
               >
                 Understand what your baby needs, instantly
               </motion.p>
+              <motion.div
+                initial={{ y: -20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="flex justify-center"
+              >
+                <ModelStatus />
+              </motion.div>
             </header>
 
             {/* Main Content */}
@@ -151,7 +167,11 @@ const Index = () => {
         )}
 
         {appState === "listening" && (
-          <ListeningView key="listening" onCancel={resetToHome} />
+          <ListeningView 
+            key="listening" 
+            onCancel={resetToHome}
+            onDetectionComplete={handleDetectionComplete}
+          />
         )}
 
         {appState === "results" && detectedCry && (
