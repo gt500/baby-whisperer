@@ -26,8 +26,8 @@ serve(async (req) => {
 
     console.log('Generating speech for text length:', text.length);
 
-    // Using Sarah voice with Turbo v2.5 model for low latency
-    const voiceId = 'EXAVITQu4vr4xnSDxMaL'; // Sarah voice
+    // Using Jessica voice with Turbo v2.5 model for low latency
+    const voiceId = 'cgSgspJ2msm6clMCkdW9'; // Jessica voice
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
