@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Play, Pause, Scissors, Upload, ArrowLeft } from "lucide-react";
+import { Play, Pause, Scissors, Upload, ArrowLeft, Wand2, Sliders } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Slider } from "@/components/ui/slider";
 
 interface Segment {
   id: string;
@@ -15,6 +16,11 @@ interface Segment {
   end: number;
   cryType: string;
   color: string;
+}
+
+interface SuggestedBoundary {
+  time: number;
+  type: "start" | "end";
 }
 
 const cryTypes = [
@@ -37,6 +43,10 @@ export default function AudioSegmentation() {
   const [markingStart, setMarkingStart] = useState<number | null>(null);
   const [selectedCryType, setSelectedCryType] = useState<string>("neh");
   const [uploading, setUploading] = useState(false);
+  const [suggestedBoundaries, setSuggestedBoundaries] = useState<SuggestedBoundary[]>([]);
+  const [silenceThreshold, setSilenceThreshold] = useState(0.02);
+  const [minSegmentDuration, setMinSegmentDuration] = useState(0.3);
+  const [showSettings, setShowSettings] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -56,7 +66,7 @@ export default function AudioSegmentation() {
     if (audioBuffer) {
       drawWaveform();
     }
-  }, [audioBuffer, segments, currentTime]);
+  }, [audioBuffer, segments, currentTime, suggestedBoundaries]);
 
   const loadAudio = async () => {
     try {
@@ -128,6 +138,24 @@ export default function AudioSegmentation() {
       ctx.fillStyle = segment.color;
       ctx.font = "12px sans-serif";
       ctx.fillText(segment.cryType, startX + 5, 15);
+    });
+
+    // Draw suggested boundaries
+    suggestedBoundaries.forEach((boundary) => {
+      const x = (boundary.time / duration) * width;
+      ctx.strokeStyle = boundary.type === "start" ? "#10b981" : "#ef4444";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Draw marker
+      ctx.fillStyle = boundary.type === "start" ? "#10b981" : "#ef4444";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(boundary.type === "start" ? "▶" : "■", x - 5, height - 10);
     });
 
     // Draw playhead
@@ -263,6 +291,93 @@ export default function AudioSegmentation() {
     }
   };
 
+  const detectSilence = () => {
+    if (!audioBuffer) {
+      toast.error("No audio loaded");
+      return;
+    }
+
+    const data = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+    const windowSize = Math.floor(sampleRate * 0.05); // 50ms windows
+    const boundaries: SuggestedBoundary[] = [];
+    
+    // Calculate RMS energy for each window
+    const energyLevels: number[] = [];
+    for (let i = 0; i < data.length; i += windowSize) {
+      const window = data.slice(i, Math.min(i + windowSize, data.length));
+      const rms = Math.sqrt(
+        window.reduce((sum, sample) => sum + sample * sample, 0) / window.length
+      );
+      energyLevels.push(rms);
+    }
+
+    // Detect transitions from silence to sound and vice versa
+    let inSound = false;
+    for (let i = 1; i < energyLevels.length; i++) {
+      const time = (i * windowSize) / sampleRate;
+      const prevEnergy = energyLevels[i - 1];
+      const currEnergy = energyLevels[i];
+
+      if (!inSound && currEnergy > silenceThreshold) {
+        // Transition from silence to sound
+        boundaries.push({ time, type: "start" });
+        inSound = true;
+      } else if (inSound && currEnergy < silenceThreshold) {
+        // Transition from sound to silence
+        boundaries.push({ time, type: "end" });
+        inSound = false;
+      }
+    }
+
+    // Filter out very short segments
+    const filteredBoundaries: SuggestedBoundary[] = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const current = boundaries[i];
+      const next = boundaries[i + 1];
+      
+      if (current.type === "start" && next.type === "end") {
+        const segmentDuration = next.time - current.time;
+        if (segmentDuration >= minSegmentDuration) {
+          filteredBoundaries.push(current, next);
+        }
+      }
+    }
+
+    setSuggestedBoundaries(filteredBoundaries);
+    toast.success(`Found ${filteredBoundaries.length / 2} potential segments`);
+  };
+
+  const autoSegment = () => {
+    if (suggestedBoundaries.length === 0) {
+      toast.error("No boundaries detected. Try adjusting the threshold.");
+      return;
+    }
+
+    const newSegments: Segment[] = [];
+    let cryIndex = 0;
+
+    for (let i = 0; i < suggestedBoundaries.length - 1; i += 2) {
+      const start = suggestedBoundaries[i];
+      const end = suggestedBoundaries[i + 1];
+
+      if (start.type === "start" && end.type === "end" && cryIndex < cryTypes.length) {
+        newSegments.push({
+          id: `${cryTypes[cryIndex].id}-${Date.now()}-${i}`,
+          start: start.time,
+          end: end.time,
+          cryType: cryTypes[cryIndex].id,
+          color: colors[cryIndex % colors.length],
+        });
+        cryIndex++;
+      }
+    }
+
+    setSegments(newSegments);
+    setSuggestedBoundaries([]);
+    toast.success(`Created ${newSegments.length} segments automatically`);
+  };
+
   const audioBufferToWav = (buffer: AudioBuffer): ArrayBuffer => {
     const length = buffer.length * buffer.numberOfChannels * 2 + 44;
     const arrayBuffer = new ArrayBuffer(length);
@@ -357,24 +472,112 @@ export default function AudioSegmentation() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <Label>Cry Type:</Label>
-              <Select value={selectedCryType} onValueChange={setSelectedCryType}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {cryTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={() => setMarkingStart(null)}>
-                <Scissors className="h-4 w-4 mr-2" />
-                {markingStart !== null ? "Cancel Marking" : "Mark Segment"}
-              </Button>
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Wand2 className="h-5 w-5 text-primary" />
+                  Auto-Detection
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowSettings(!showSettings)}
+                >
+                  <Sliders className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
+              </div>
+
+              {showSettings && (
+                <div className="space-y-4 mb-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label className="text-sm">
+                      Silence Threshold: {silenceThreshold.toFixed(3)}
+                    </Label>
+                    <Slider
+                      value={[silenceThreshold]}
+                      onValueChange={([value]) => setSilenceThreshold(value)}
+                      min={0.001}
+                      max={0.1}
+                      step={0.001}
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Lower = more sensitive to quiet sounds
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm">
+                      Min Segment Duration: {minSegmentDuration.toFixed(1)}s
+                    </Label>
+                    <Slider
+                      value={[minSegmentDuration]}
+                      onValueChange={([value]) => setMinSegmentDuration(value)}
+                      min={0.1}
+                      max={2}
+                      step={0.1}
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Filters out segments shorter than this
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={detectSilence}
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  Detect Boundaries
+                </Button>
+                <Button
+                  onClick={autoSegment}
+                  disabled={suggestedBoundaries.length === 0}
+                  className="flex-1"
+                >
+                  Apply Auto-Segments ({suggestedBoundaries.length / 2})
+                </Button>
+              </div>
+              
+              {suggestedBoundaries.length > 0 && (
+                <div className="mt-4 p-3 bg-accent/10 border border-accent/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="text-green-600 font-semibold">▶ Green lines</span> = segment start, 
+                    <span className="text-red-600 font-semibold ml-2">■ Red lines</span> = segment end
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Adjust settings and re-detect if needed, or click "Apply" to create segments
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Manual Marking</h3>
+              <div className="flex items-center gap-4">
+                <Label>Cry Type:</Label>
+                <Select value={selectedCryType} onValueChange={setSelectedCryType}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cryTypes.map((type) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={() => setMarkingStart(null)}>
+                  <Scissors className="h-4 w-4 mr-2" />
+                  {markingStart !== null ? "Cancel Marking" : "Mark Segment"}
+                </Button>
+              </div>
             </div>
 
             <div>
