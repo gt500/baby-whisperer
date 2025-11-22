@@ -18,40 +18,36 @@ serve(async (req) => {
       throw new Error('Text is required');
     }
 
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
-    if (!ELEVENLABS_API_KEY) {
-      throw new Error('ElevenLabs API key not configured');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OpenAI API key not configured');
     }
 
     console.log('Generating speech for text length:', text.length);
 
-    // Using Jessica voice with Turbo v2.5 model for low latency
-    const voiceId = 'cgSgspJ2msm6clMCkdW9'; // Jessica voice
+    // Using OpenAI TTS with alloy voice
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      'https://api.openai.com/v1/audio/speech',
       {
         method: 'POST',
         headers: {
-          'Accept': 'audio/mpeg',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
-          'xi-api-key': ELEVENLABS_API_KEY,
         },
         body: JSON.stringify({
-          text: text,
-          model_id: 'eleven_turbo_v2_5',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          }
+          model: 'tts-1',
+          input: text,
+          voice: 'alloy',
+          response_format: 'mp3',
         }),
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs API error:', errorText);
-      throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
+      console.error('OpenAI API error:', errorText);
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
     }
 
     // Get the audio data as an array buffer
