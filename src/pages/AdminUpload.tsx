@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Baby, Upload, CheckCircle2, XCircle, Play, Trash2, LogOut, Loader2, FolderUp, AlertCircle } from "lucide-react";
+import { Baby, Upload, CheckCircle2, XCircle, Play, Trash2, LogOut, Loader2, FolderUp, AlertCircle, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -251,6 +251,10 @@ const AdminUpload = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <Button onClick={() => navigate("/audio-segmentation")} variant="secondary">
+              <Scissors className="w-4 h-4 mr-2" />
+              Audio Segmentation
+            </Button>
             <Button onClick={() => navigate("/")} variant="ghost">
               ← Back to App
             </Button>
