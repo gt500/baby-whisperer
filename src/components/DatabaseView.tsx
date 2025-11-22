@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Search, Volume2 } from "lucide-react";
+import { ArrowLeft, Search, Volume2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,15 +11,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface DatabaseViewProps {
   onBack: () => void;
 }
 
 const DatabaseView = ({ onBack }: DatabaseViewProps) => {
+  const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<CryCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCryId, setSelectedCryId] = useState<string | null>(null);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const filteredCries = cryDatabase.filter((cry) => {
     const matchesCategory = selectedCategory === "all" || cry.category === selectedCategory;
@@ -45,6 +50,72 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
     low: "bg-success/20 text-success-foreground",
     medium: "bg-warning/20 text-warning-foreground",
     high: "bg-destructive/20 text-destructive-foreground",
+  };
+
+  const handlePlayAudio = async (cryId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Stop current audio if playing
+    if (currentAudio) {
+      currentAudio.pause();
+      setCurrentAudio(null);
+      if (playingAudioId === cryId) {
+        setPlayingAudioId(null);
+        return;
+      }
+    }
+
+    const cry = cryDatabase.find((c) => c.id === cryId);
+    if (!cry) return;
+
+    setPlayingAudioId(cryId);
+
+    try {
+      // Combine description and solutions into text
+      const text = `${cry.description}. Solutions: ${cry.solutions.join('. ')}`;
+
+      const { data, error } = await supabase.functions.invoke('text-to-speech', {
+        body: { text }
+      });
+
+      if (error) throw error;
+
+      // Convert base64 to audio and play
+      const audioBlob = new Blob(
+        [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
+        { type: 'audio/mpeg' }
+      );
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      audio.onended = () => {
+        setPlayingAudioId(null);
+        setCurrentAudio(null);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onerror = () => {
+        setPlayingAudioId(null);
+        setCurrentAudio(null);
+        URL.revokeObjectURL(audioUrl);
+        toast({
+          title: "Playback Error",
+          description: "Failed to play audio",
+          variant: "destructive",
+        });
+      };
+
+      setCurrentAudio(audio);
+      await audio.play();
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      setPlayingAudioId(null);
+      toast({
+        title: "Error",
+        description: "Failed to generate speech. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -128,7 +199,17 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
               </Badge>
 
               <div className="flex items-start gap-2 text-sm text-muted-foreground mb-3">
-                <Volume2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <button
+                  onClick={(e) => handlePlayAudio(cry.id, e)}
+                  className="flex-shrink-0 p-1 rounded-full hover:bg-primary/10 transition-colors"
+                  disabled={playingAudioId === cry.id}
+                >
+                  {playingAudioId === cry.id ? (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-primary" />
+                  )}
+                </button>
                 <span className="line-clamp-2">{cry.audioPattern}</span>
               </div>
 
@@ -173,10 +254,21 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
 
                 <div className="bg-secondary/50 rounded-xl p-4">
                   <div className="flex items-start gap-2">
-                    <Volume2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
+                    <button
+                      onClick={(e) => handlePlayAudio(selectedCry.id, e)}
+                      className="flex-shrink-0 p-2 rounded-full hover:bg-primary/10 transition-colors"
+                      disabled={playingAudioId === selectedCry.id}
+                    >
+                      {playingAudioId === selectedCry.id ? (
+                        <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 text-primary" />
+                      )}
+                    </button>
+                    <div className="flex-1">
                       <div className="font-semibold mb-1">Audio Pattern</div>
                       <div className="text-sm text-muted-foreground">{selectedCry.audioPattern}</div>
+                      <div className="text-xs text-primary mt-2">Click icon to hear description</div>
                     </div>
                   </div>
                 </div>
