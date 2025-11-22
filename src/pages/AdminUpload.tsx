@@ -1,18 +1,22 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Baby, Upload, CheckCircle2, XCircle, Play, Trash2, LogOut, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Baby, Upload, CheckCircle2, XCircle, Play, Trash2, LogOut, Loader2, FolderUp, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { cryDatabase, categories } from "@/data/cryDatabase";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const AdminUpload = () => {
   const [user, setUser] = useState<any>(null);
   const [uploadStatus, setUploadStatus] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkResults, setBulkResults] = useState<{ matched: string[]; unmatched: string[]; success: string[]; failed: string[] } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -145,6 +149,76 @@ const AdminUpload = () => {
     }
   };
 
+  const handleBulkUpload = async (files: FileList) => {
+    setBulkUploading(true);
+    setBulkProgress(0);
+    
+    const matched: string[] = [];
+    const unmatched: string[] = [];
+    const success: string[] = [];
+    const failed: string[] = [];
+
+    // Create a map of possible filename patterns to cry IDs
+    const fileArray = Array.from(files);
+    const totalFiles = fileArray.length;
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const fileName = file.name.toLowerCase().replace(/\.mp3$/i, '');
+      
+      // Try to match filename to cry ID
+      const matchedCry = cryDatabase.find(cry => {
+        const cryId = cry.id.toLowerCase();
+        const cryName = cry.name.toLowerCase();
+        
+        // Match by ID or by name (remove special characters and spaces)
+        return fileName === cryId || 
+               fileName.replace(/[^a-z0-9]/g, '') === cryId.replace(/[^a-z0-9]/g, '') ||
+               fileName.replace(/[^a-z0-9]/g, '').includes(cryId.replace(/[^a-z0-9]/g, ''));
+      });
+
+      if (matchedCry) {
+        matched.push(file.name);
+        
+        try {
+          // Delete existing file if it exists
+          await supabase.storage
+            .from('cry-audio')
+            .remove([`${matchedCry.id}.mp3`]);
+
+          // Upload new file
+          const { error } = await supabase.storage
+            .from('cry-audio')
+            .upload(`${matchedCry.id}.mp3`, file, {
+              cacheControl: '3600',
+              upsert: true
+            });
+
+          if (error) throw error;
+          
+          success.push(`${file.name} → ${matchedCry.name}`);
+        } catch (error: any) {
+          failed.push(`${file.name}: ${error.message}`);
+        }
+      } else {
+        unmatched.push(file.name);
+      }
+
+      setBulkProgress(((i + 1) / totalFiles) * 100);
+    }
+
+    setBulkResults({ matched, unmatched, success, failed });
+    setBulkUploading(false);
+    
+    // Refresh the status
+    await checkExistingFiles();
+
+    toast({
+      title: "Bulk upload complete",
+      description: `${success.length} files uploaded successfully`,
+    });
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate("/login");
@@ -209,6 +283,148 @@ const AdminUpload = () => {
             </div>
           </div>
           <Progress value={progress} className="h-3" />
+        </motion.div>
+
+        {/* Bulk Upload Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-gradient-to-br from-accent/20 to-accent/10 rounded-3xl p-8 shadow-card mb-8 border-2 border-accent/30"
+        >
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <FolderUp className="w-6 h-6 text-accent" />
+                <h2 className="text-2xl font-bold">Bulk Upload</h2>
+              </div>
+              <p className="text-muted-foreground mb-4">
+                Upload all 17 MP3 files at once. Files will be automatically matched based on filename.
+              </p>
+              <div className="text-sm text-muted-foreground space-y-1 bg-card/50 rounded-lg p-4">
+                <p className="font-semibold mb-2">Filename matching tips:</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>Exact ID match: <code className="bg-muted px-2 py-0.5 rounded">neh.mp3</code></li>
+                  <li>Name match: <code className="bg-muted px-2 py-0.5 rounded">hungry.mp3</code> or <code className="bg-muted px-2 py-0.5 rounded">neh-hungry.mp3</code></li>
+                  <li>Spaces and dashes are ignored: <code className="bg-muted px-2 py-0.5 rounded">sharp pain.mp3</code></li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="w-full md:w-auto">
+              <Button
+                onClick={() => document.getElementById('bulk-upload')?.click()}
+                size="lg"
+                className="w-full md:w-auto bg-gradient-to-r from-accent to-accent-hover text-accent-foreground shadow-soft hover:scale-105 transition-all h-14 px-8"
+                disabled={bulkUploading}
+              >
+                {bulkUploading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Uploading... {Math.round(bulkProgress)}%
+                  </>
+                ) : (
+                  <>
+                    <FolderUp className="w-5 h-5 mr-2" />
+                    Select 17 Files
+                  </>
+                )}
+              </Button>
+              <input
+                id="bulk-upload"
+                type="file"
+                accept="audio/mp3,audio/mpeg"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) {
+                    handleBulkUpload(files);
+                  }
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Bulk Upload Progress */}
+          {bulkUploading && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mt-6"
+            >
+              <Progress value={bulkProgress} className="h-2" />
+              <p className="text-sm text-center text-muted-foreground mt-2">
+                Processing files... {Math.round(bulkProgress)}%
+              </p>
+            </motion.div>
+          )}
+
+          {/* Bulk Upload Results */}
+          <AnimatePresence>
+            {bulkResults && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-6 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-lg">Upload Results</h3>
+                  <Button
+                    onClick={() => setBulkResults(null)}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    Clear
+                  </Button>
+                </div>
+
+                {bulkResults.success.length > 0 && (
+                  <Alert className="bg-success/10 border-success/30">
+                    <CheckCircle2 className="w-4 h-4 text-success" />
+                    <AlertDescription>
+                      <p className="font-semibold mb-2">Successfully uploaded ({bulkResults.success.length}):</p>
+                      <ul className="text-sm space-y-1 list-disc list-inside">
+                        {bulkResults.success.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {bulkResults.unmatched.length > 0 && (
+                  <Alert className="bg-warning/10 border-warning/30">
+                    <AlertCircle className="w-4 h-4 text-warning" />
+                    <AlertDescription>
+                      <p className="font-semibold mb-2">Could not match ({bulkResults.unmatched.length}):</p>
+                      <ul className="text-sm space-y-1 list-disc list-inside">
+                        {bulkResults.unmatched.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {bulkResults.failed.length > 0 && (
+                  <Alert className="bg-destructive/10 border-destructive/30">
+                    <XCircle className="w-4 h-4 text-destructive" />
+                    <AlertDescription>
+                      <p className="font-semibold mb-2">Failed to upload ({bulkResults.failed.length}):</p>
+                      <ul className="text-sm space-y-1 list-disc list-inside">
+                        {bulkResults.failed.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         {/* Cry Types Grid */}
