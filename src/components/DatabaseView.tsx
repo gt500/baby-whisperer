@@ -71,33 +71,56 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
     setPlayingAudioId(cryId);
 
     try {
-      // Combine description and solutions into text
-      const text = `${cry.description}. Solutions: ${cry.solutions.join('. ')}`;
+      // First, try to get actual cry audio from storage
+      const { data: fileList } = await supabase.storage
+        .from('cry-audio')
+        .list('', {
+          search: `${cryId}.mp3`
+        });
 
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text }
-      });
+      let audioUrl: string;
 
-      if (error) throw error;
+      if (fileList && fileList.length > 0) {
+        // Use actual cry audio sample from storage
+        const { data } = supabase.storage
+          .from('cry-audio')
+          .getPublicUrl(`${cryId}.mp3`);
+        
+        audioUrl = data.publicUrl;
+      } else {
+        // Fall back to TTS if no audio file exists
+        const text = `${cry.description}. Solutions: ${cry.solutions.join('. ')}`;
 
-      // Convert base64 to audio and play
-      const audioBlob = new Blob(
-        [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
-        { type: 'audio/mpeg' }
-      );
-      const audioUrl = URL.createObjectURL(audioBlob);
+        const { data, error } = await supabase.functions.invoke('text-to-speech', {
+          body: { text }
+        });
+
+        if (error) throw error;
+
+        // Convert base64 to audio
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
+          { type: 'audio/mpeg' }
+        );
+        audioUrl = URL.createObjectURL(audioBlob);
+      }
+
       const audio = new Audio(audioUrl);
       
       audio.onended = () => {
         setPlayingAudioId(null);
         setCurrentAudio(null);
-        URL.revokeObjectURL(audioUrl);
+        if (audioUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(audioUrl);
+        }
       };
 
       audio.onerror = () => {
         setPlayingAudioId(null);
         setCurrentAudio(null);
-        URL.revokeObjectURL(audioUrl);
+        if (audioUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(audioUrl);
+        }
         toast({
           title: "Playback Error",
           description: "Failed to play audio",
@@ -112,7 +135,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
       setPlayingAudioId(null);
       toast({
         title: "Error",
-        description: "Failed to generate speech. Please try again.",
+        description: "Failed to load audio. Please try again.",
         variant: "destructive",
       });
     }
