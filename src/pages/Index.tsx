@@ -18,19 +18,22 @@ const Index = () => {
     setAppState("listening");
   };
 
-  const handleDetectionComplete = (isCrying: boolean, confidence: number) => {
-    if (!isCrying) {
+  const handleDetectionComplete = (isCrying: boolean, confidence: number, cryType: string | null) => {
+    if (!isCrying || !cryType) {
       // No cry detected
       setAppState("home");
-      // You could show a message here
       return;
     }
 
-    // Cry detected! For now, simulate type classification
-    // In production, you'd need a multi-class model for the 17 types
-    const randomCry = cryDatabase[Math.floor(Math.random() * cryDatabase.length)];
-    setDetectedCry(randomCry);
-    setAppState("results");
+    // Find the detected cry type in our database
+    const detectedCryData = cryDatabase.find(cry => cry.id === cryType);
+    if (detectedCryData) {
+      setDetectedCry(detectedCryData);
+      setAppState("results");
+    } else {
+      // Fallback if cry type not found
+      setAppState("home");
+    }
   };
 
   const resetToHome = () => {

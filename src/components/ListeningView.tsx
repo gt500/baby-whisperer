@@ -4,18 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect } from "react";
 import { recordAudio, audioBufferToFloat32Array, normalizeAudio, hasSignificantAudio } from "@/lib/audioProcessing";
-import { detectCry, loadModel } from "@/lib/modelInference";
+import { useCryDetection } from "@/hooks/useCryDetection";
 import { toast } from "sonner";
 
 interface ListeningViewProps {
   onCancel: () => void;
-  onDetectionComplete: (isCrying: boolean, confidence: number) => void;
+  onDetectionComplete: (isCrying: boolean, confidence: number, cryType: string | null) => void;
 }
 
 const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>("Initializing...");
   const [isProcessing, setIsProcessing] = useState(false);
+  const { detectCry, loadModel } = useCryDetection();
 
   useEffect(() => {
     startDetection();
@@ -75,6 +76,12 @@ const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) =>
       
       const result = await detectCry(normalizedAudio);
       
+      if (!result) {
+        // Detection was blocked (e.g., subscription limit)
+        onCancel();
+        return;
+      }
+      
       // Phase 6: Complete
       setProgress(100);
       setStatus("Analysis complete!");
@@ -82,7 +89,7 @@ const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) =>
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Return results
-      onDetectionComplete(result.isCrying, result.confidence);
+      onDetectionComplete(result.isCrying, result.confidence, result.cryType);
       
     } catch (error: any) {
       console.error('Detection error:', error);
