@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscription_end: null,
         can_detect: true,
         daily_detections_used: 0,
-        daily_detections_limit: 10
+        daily_detections_limit: 5
       });
       return;
     }
@@ -70,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscription_end: null,
         can_detect: true,
         daily_detections_used: 0,
-        daily_detections_limit: 10
+        daily_detections_limit: 5
       });
     }
   };
