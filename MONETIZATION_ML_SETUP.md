@@ -49,23 +49,49 @@ The TensorFlow.js model is now fully integrated into the cry detection system:
 - ✅ Real-time classification into 17 cry types
 
 **To Enable Full ML Mode:**
-You have `baby_cry_detector.h5` in `/public/models/`. Convert it:
+You have SavedModel files in `/public/models/saved_model/`. Convert them:
 
+**Option 1: Automated Script (Recommended)**
+```bash
+# Run the automated conversion script
+python scripts/convert_model.py
+```
+
+The script will:
+- Install tensorflowjs if needed
+- Convert SavedModel → TensorFlow.js
+- Verify output files
+- Provide troubleshooting guidance
+
+**Option 2: Manual Conversion**
 ```bash
 # Install converter
 pip install tensorflowjs
 
-# Convert model
-tensorflowjs_converter --input_format=keras \
-  public/models/baby_cry_detector.h5 \
+# Convert SavedModel to TensorFlow.js
+tensorflowjs_converter \
+  --input_format=tf_saved_model \
+  --output_format=tfjs_layers_model \
+  --signature_name=serving_default \
+  public/models/saved_model \
   public/models/baby_cry_detector
 ```
 
-This creates:
+**Input files:**
+```
+public/models/saved_model/
+├── saved_model.pb          # Model architecture
+├── fingerprint.pb          # Model fingerprint
+└── variables/
+    ├── variables.data-00000-of-00001
+    └── variables.index
+```
+
+**Output files created:**
 ```
 public/models/baby_cry_detector/
-├── model.json              # Model architecture
-└── group1-shard1of1.bin   # Model weights
+├── model.json              # Model architecture (JSON)
+└── group1-shard1of1.bin   # Model weights (binary)
 ```
 
 **After Conversion:**
@@ -261,10 +287,12 @@ See `CAPACITOR_BUILD_GUIDE.md` for detailed instructions.
 - Fix `owh.mp3` mislabeling
 - Test audio playback for all 17 cry types
 
-### 2. Convert ML Model (Optional - 5 mins) ⚡
+### 2. Convert ML Model (Quick - 5 mins) ⚡
 **Priority:** Low (fallback mode works well)
-- Run TensorFlow.js conversion command
-- Verify `model.json` and `.bin` files created
+- Run automated script: `python scripts/convert_model.py`
+- OR use manual conversion command (see above)
+- Verify `model.json` and `.bin` files created in `/public/models/baby_cry_detector/`
+- Refresh app and check console: "Model loaded successfully"
 - Test full ML mode vs fallback accuracy
 
 ### 3. Polish & Launch 🎨
