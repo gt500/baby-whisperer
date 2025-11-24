@@ -131,7 +131,7 @@ serve(async (req) => {
       subscription_end: subscriptionEnd,
       can_detect: canDetect,
       daily_detections_used: dailyCount || 0,
-      daily_detections_limit: planType === 'free' ? 10 : null
+      daily_detections_limit: planType === 'free' ? 5 : null
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
