@@ -82,7 +82,7 @@ const Pricing = () => {
             <ul className="space-y-3 mb-8">
               <li className="flex items-start gap-2">
                 <Check className="w-5 h-5 text-success mt-0.5" />
-                <span>10 detections per day</span>
+                <span>5 detections per day</span>
               </li>
               <li className="flex items-start gap-2">
                 <Check className="w-5 h-5 text-success mt-0.5" />
