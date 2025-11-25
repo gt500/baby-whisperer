@@ -21,26 +21,66 @@ const AdminUpload = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check authentication
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Check authentication and admin role
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
       if (!session) {
         navigate("/login");
-      } else {
-        setUser(session.user);
-        checkExistingFiles();
+        return;
       }
-    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Verify admin role
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .eq('role', 'admin');
+
+      if (!roles || roles.length === 0) {
+        toast({
+          title: "Access Denied",
+          description: "Admin privileges required",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
+
+      setUser(session.user);
+      checkExistingFiles();
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!session) {
         navigate("/login");
-      } else {
-        setUser(session.user);
+        return;
       }
+
+      // Verify admin role on auth state change
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .eq('role', 'admin');
+
+      if (!roles || roles.length === 0) {
+        toast({
+          title: "Access Denied",
+          description: "Admin privileges required",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
+
+      setUser(session.user);
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const checkExistingFiles = async () => {
     const status: Record<string, boolean> = {};
