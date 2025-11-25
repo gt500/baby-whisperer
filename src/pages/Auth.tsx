@@ -6,6 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+const signUpSchema = z.object({
+  fullName: z.string().trim().min(2, "Name must be at least 2 characters").max(100, "Name too long"),
+  email: z.string().trim().email("Invalid email address").max(255, "Email too long"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password too long"),
+});
+
+const signInSchema = z.object({
+  email: z.string().trim().email("Invalid email address").max(255, "Email too long"),
+  password: z.string().min(6, "Password must be at least 6 characters").max(128, "Password too long"),
+});
 
 const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -13,24 +26,56 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { signIn, signUp } = useAuth();
+  const { toast } = useToast();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     setLoading(true);
 
     try {
+      // Validate inputs
+      const schema = isSignUp ? signUpSchema : signInSchema;
+      const data = isSignUp 
+        ? { fullName, email, password }
+        : { email, password };
+      
+      const result = schema.safeParse(data);
+      
+      if (!result.success) {
+        const fieldErrors: Record<string, string> = {};
+        result.error.errors.forEach((err) => {
+          if (err.path[0]) {
+            fieldErrors[err.path[0] as string] = err.message;
+          }
+        });
+        setErrors(fieldErrors);
+        toast({
+          title: "Validation Error",
+          description: "Please check your inputs and try again",
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (isSignUp) {
-        const { error } = await signUp(email, password, fullName);
+        const signUpData = result.data as z.infer<typeof signUpSchema>;
+        const { error } = await signUp(signUpData.email, signUpData.password, signUpData.fullName);
         if (error) throw error;
       } else {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(result.data.email, result.data.password);
         if (error) throw error;
       }
       navigate("/");
     } catch (error: any) {
-      console.error("Auth error:", error);
+      toast({
+        title: "Authentication Error",
+        description: error.message || "An error occurred",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -74,6 +119,9 @@ const Auth = () => {
                   required={isSignUp}
                   className="h-12"
                 />
+                {errors.fullName && (
+                  <p className="text-sm text-destructive">{errors.fullName}</p>
+                )}
               </div>
             )}
 
@@ -91,6 +139,9 @@ const Auth = () => {
                 required
                 className="h-12"
               />
+              {errors.email && (
+                <p className="text-sm text-destructive">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -105,9 +156,12 @@ const Auth = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={isSignUp ? 8 : 6}
                 className="h-12"
               />
+              {errors.password && (
+                <p className="text-sm text-destructive">{errors.password}</p>
+              )}
             </div>
 
             <Button
