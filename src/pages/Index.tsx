@@ -64,7 +64,7 @@ const Index = () => {
                   <Baby className="w-7 h-7 text-white" />
                 </div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  Baby Cry Detective
+                  Baby Whisperer
                 </h1>
               </motion.div>
               <motion.p
@@ -213,7 +213,7 @@ const Index = () => {
                     <Baby className="w-9 h-9 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold">About Baby Cry Detective</h1>
+                    <h1 className="text-3xl font-bold">About Baby Whisperer</h1>
                     <p className="text-muted-foreground">Science-backed cry detection</p>
                   </div>
                 </div>
