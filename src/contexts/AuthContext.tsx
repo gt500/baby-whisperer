@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error) {
       toast({
         title: "Account created!",
-        description: "You can now start using Baby Cry Detective.",
+        description: "You can now start using Baby Whisperer.",
       });
     }
     
