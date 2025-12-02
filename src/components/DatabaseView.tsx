@@ -22,14 +22,6 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-const TTS_VOICES = [
-  { id: 'alloy', name: 'Alloy', description: 'Neutral' },
-  { id: 'nova', name: 'Nova', description: 'Warm female' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Soft female' },
-  { id: 'echo', name: 'Echo', description: 'Male' },
-  { id: 'onyx', name: 'Onyx', description: 'Deep male' },
-  { id: 'fable', name: 'Fable', description: 'Expressive' },
-];
 
 interface DatabaseViewProps {
   onBack: () => void;
@@ -43,7 +35,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [loadingAudioId, setLoadingAudioId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
-  const [selectedVoice, setSelectedVoice] = useState('nova');
+  
 
   const filteredCries = cryDatabase.filter((cry) => {
     const matchesCategory = selectedCategory === "all" || cry.category === selectedCategory;
@@ -192,7 +184,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
       const text = `${cry.name}. ${cry.description}. What to do: ${cry.solutions.join('. ')}`;
 
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, voice: selectedVoice }
+        body: { text, voice: 'nova' }
       });
 
       if (error) {
@@ -394,76 +386,6 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
                 </div>
 
                 <div className="bg-secondary/50 rounded-xl p-4">
-                  <div className="mb-4">
-                    <span className="text-sm font-medium mb-2 block">Select Voice:</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {TTS_VOICES.map((voice) => (
-                        <button
-                          key={voice.id}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            setSelectedVoice(voice.id);
-                            // Play preview
-                            const previewKey = `preview-${voice.id}`;
-                            if (loadingAudioId === previewKey || playingAudioId === previewKey) {
-                              stopAudio();
-                              return;
-                            }
-                            if (currentAudio) {
-                              currentAudio.pause();
-                              setCurrentAudio(null);
-                            }
-                            setLoadingAudioId(previewKey);
-                            try {
-                              const { data, error } = await supabase.functions.invoke('text-to-speech', {
-                                body: { text: `Hi, I'm ${voice.name}. I can help you understand your baby's needs.`, voice: voice.id }
-                              });
-                              if (error) throw error;
-                              if (!data?.audioContent) throw new Error('No audio');
-                              const audioBlob = new Blob(
-                                [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
-                                { type: 'audio/mpeg' }
-                              );
-                              const audioUrl = URL.createObjectURL(audioBlob);
-                              const audio = new Audio(audioUrl);
-                              audio.onended = () => {
-                                setPlayingAudioId(null);
-                                setLoadingAudioId(null);
-                                setCurrentAudio(null);
-                                URL.revokeObjectURL(audioUrl);
-                              };
-                              setCurrentAudio(audio);
-                              setLoadingAudioId(null);
-                              setPlayingAudioId(previewKey);
-                              await audio.play();
-                            } catch (err) {
-                              setLoadingAudioId(null);
-                              toast({ title: "Preview failed", variant: "destructive" });
-                            }
-                          }}
-                          className={`flex items-center gap-2 p-2 rounded-lg border transition-all text-left ${
-                            selectedVoice === voice.id 
-                              ? 'border-primary bg-primary/10' 
-                              : 'border-border hover:border-primary/50'
-                          }`}
-                        >
-                          <div className="flex-shrink-0">
-                            {loadingAudioId === `preview-${voice.id}` ? (
-                              <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                            ) : playingAudioId === `preview-${voice.id}` ? (
-                              <Square className="w-4 h-4 text-destructive fill-destructive" />
-                            ) : (
-                              <Volume2 className="w-4 h-4 text-primary" />
-                            )}
-                          </div>
-                          <div>
-                            <div className="text-sm font-medium">{voice.name}</div>
-                            <div className="text-xs text-muted-foreground">{voice.description}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                   <div className="flex items-start gap-2">
                     <button
                       onClick={(e) => playingAudioId === `tts-${selectedCry.id}` ? stopAudio(e) : handlePlayTTS(selectedCry.id, e)}
