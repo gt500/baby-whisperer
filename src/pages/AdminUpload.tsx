@@ -18,6 +18,8 @@ const AdminUpload = () => {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
   const [bulkResults, setBulkResults] = useState<{ matched: string[]; unmatched: string[]; success: string[]; failed: string[] } | null>(null);
+  const [modelUploading, setModelUploading] = useState(false);
+  const [modelStatus, setModelStatus] = useState<'none' | 'uploaded' | 'checking'>('checking');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -130,6 +132,64 @@ const AdminUpload = () => {
     
     console.log('[AdminUpload] File check complete:', Object.values(status).filter(Boolean).length, 'files found');
     setUploadStatus(status);
+    
+    // Also check for ML model weights
+    await checkModelStatus();
+  };
+
+  const checkModelStatus = async () => {
+    setModelStatus('checking');
+    try {
+      const { data } = await supabase.storage
+        .from('ml-models')
+        .list('', { search: 'group1-shard1of1.bin' });
+      setModelStatus(data && data.length > 0 ? 'uploaded' : 'none');
+    } catch (err) {
+      console.error('Error checking model status:', err);
+      setModelStatus('none');
+    }
+  };
+
+  const handleModelUpload = async (file: File) => {
+    if (!file.name.endsWith('.bin')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload the group1-shard1of1.bin weights file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setModelUploading(true);
+
+    try {
+      // Delete existing if present
+      await supabase.storage.from('ml-models').remove(['group1-shard1of1.bin']);
+
+      const { error } = await supabase.storage
+        .from('ml-models')
+        .upload('group1-shard1of1.bin', file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (error) throw error;
+
+      setModelStatus('uploaded');
+      toast({
+        title: "Model uploaded!",
+        description: "ML model weights uploaded successfully. Refresh the app to use real detection.",
+      });
+    } catch (err: any) {
+      console.error('Model upload error:', err);
+      toast({
+        title: "Upload failed",
+        description: err.message || "Failed to upload model weights",
+        variant: "destructive",
+      });
+    } finally {
+      setModelUploading(false);
+    }
   };
 
   const handleFileUpload = async (cryId: string, file: File) => {
@@ -364,6 +424,76 @@ const AdminUpload = () => {
             </div>
           </div>
           <Progress value={progress} className="h-3" />
+        </motion.div>
+
+        {/* ML Model Upload Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-gradient-to-br from-primary/20 to-primary/10 rounded-3xl p-8 shadow-card mb-8 border-2 border-primary/30"
+        >
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <Upload className="w-6 h-6 text-primary" />
+                <h2 className="text-2xl font-bold">ML Model Weights</h2>
+                {modelStatus === 'uploaded' && (
+                  <span className="bg-green-500/20 text-green-600 px-3 py-1 rounded-full text-sm font-medium">
+                    ✓ Uploaded
+                  </span>
+                )}
+                {modelStatus === 'none' && (
+                  <span className="bg-destructive/20 text-destructive px-3 py-1 rounded-full text-sm font-medium">
+                    Missing
+                  </span>
+                )}
+              </div>
+              <p className="text-muted-foreground">
+                Upload the <code className="bg-muted px-2 py-0.5 rounded">group1-shard1of1.bin</code> file from your model folder.
+              </p>
+              {modelStatus === 'none' && (
+                <Alert className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Without model weights, cry detection runs in fallback mode with limited accuracy.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+            
+            <div className="w-full md:w-auto">
+              <Button
+                onClick={() => document.getElementById('model-upload')?.click()}
+                size="lg"
+                className="w-full md:w-auto bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-soft hover:scale-105 transition-all h-14 px-8"
+                disabled={modelUploading}
+              >
+                {modelUploading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 mr-2" />
+                    {modelStatus === 'uploaded' ? 'Replace Model' : 'Upload Weights'}
+                  </>
+                )}
+              </Button>
+              <input
+                id="model-upload"
+                type="file"
+                accept=".bin"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleModelUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </div>
         </motion.div>
 
         {/* Bulk Upload Section */}
