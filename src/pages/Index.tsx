@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 import { Mic, Baby, BookOpen, Info, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ListeningView from "@/components/ListeningView";
@@ -354,6 +355,14 @@ const Index = () => {
                     anonymized cry recordings. This app is a tool to help parents - always consult your 
                     pediatrician for medical concerns.
                   </p>
+                  <div className="flex gap-4 pt-2">
+                    <Link to="/privacy" className="text-primary hover:underline text-sm">
+                      Privacy Policy
+                    </Link>
+                    <Link to="/terms" className="text-primary hover:underline text-sm">
+                      Terms of Service
+                    </Link>
+                  </div>
                 </section>
               </div>
             </div>
