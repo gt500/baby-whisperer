@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cryDatabase, categories, CryCategory } from "@/data/cryDatabase";
+import { BabyHandPositions } from "./BabyHandPositions";
 import {
   Dialog,
   DialogContent,
@@ -449,6 +450,8 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
           )}
         </DialogContent>
       </Dialog>
+
+      <BabyHandPositions />
     </motion.div>
   );
 };

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { CryType } from "@/data/cryDatabase";
 import { Badge } from "@/components/ui/badge";
 import { FeedbackPrompt } from "./FeedbackPrompt";
+import { BabyHandPositions } from "./BabyHandPositions";
 import { useState } from "react";
 
 interface ResultsViewProps {
@@ -192,6 +193,8 @@ const ResultsView = ({
           </Button>
         </motion.div>
       </div>
+
+      <BabyHandPositions />
     </motion.div>
   );
 };
