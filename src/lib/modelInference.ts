@@ -12,6 +12,13 @@ let loadError: string | null = null;
 let loadAttempts = 0;
 const MAX_LOAD_ATTEMPTS = 3;
 
+// Inline model JSON to avoid file serving issues
+const MODEL_JSON = {"format": "graph-model", "generatedBy": "2.19.0", "convertedBy": "TensorFlow.js Converter v4.22.0", "signature": {"inputs": {"dense_6_input": {"name": "dense_6_input:0", "dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "-1"}, {"size": "1024"}]}}}, "outputs": {"output_0": {"name": "Identity:0", "dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "-1"}, {"size": "1"}]}}}}, "modelTopology": {"node": [{"name": "StatefulPartitionedCall/sequential_3_1/dense_6_1/Cast/ReadVariableOp", "op": "Const", "attr": {"value": {"tensor": {"dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "1024"}, {"size": "256"}]}}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_6_1/BiasAdd/ReadVariableOp", "op": "Const", "attr": {"value": {"tensor": {"dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "256"}]}}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_7_1/Cast/ReadVariableOp", "op": "Const", "attr": {"value": {"tensor": {"dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "256"}, {"size": "128"}]}}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_7_1/BiasAdd/ReadVariableOp", "op": "Const", "attr": {"value": {"tensor": {"dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "128"}]}}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_8_1/Cast/ReadVariableOp", "op": "Const", "attr": {"value": {"tensor": {"dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "128"}, {"size": "1"}]}}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_8_1/Add/ReadVariableOp", "op": "Const", "attr": {"value": {"tensor": {"dtype": "DT_FLOAT", "tensorShape": {"dim": [{"size": "1"}]}}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "dense_6_input", "op": "Placeholder", "attr": {"shape": {"shape": {"dim": [{"size": "-1"}, {"size": "1024"}]}}, "dtype": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_6_1/Relu", "op": "_FusedMatMul", "input": ["dense_6_input", "StatefulPartitionedCall/sequential_3_1/dense_6_1/Cast/ReadVariableOp", "StatefulPartitionedCall/sequential_3_1/dense_6_1/BiasAdd/ReadVariableOp"], "device": "/device:CPU:0", "attr": {"transpose_a": {"b": false}, "transpose_b": {"b": false}, "fused_ops": {"list": {"s": ["Qmlhc0FkZA==", "UmVsdQ=="]}}, "num_args": {"i": "1"}, "leakyrelu_alpha": {"f": 0.2}, "epsilon": {"f": 0.0}, "T": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_7_1/Relu", "op": "_FusedMatMul", "input": ["StatefulPartitionedCall/sequential_3_1/dense_6_1/Relu", "StatefulPartitionedCall/sequential_3_1/dense_7_1/Cast/ReadVariableOp", "StatefulPartitionedCall/sequential_3_1/dense_7_1/BiasAdd/ReadVariableOp"], "device": "/device:CPU:0", "attr": {"transpose_a": {"b": false}, "transpose_b": {"b": false}, "fused_ops": {"list": {"s": ["Qmlhc0FkZA==", "UmVsdQ=="]}}, "num_args": {"i": "1"}, "leakyrelu_alpha": {"f": 0.2}, "epsilon": {"f": 0.0}, "T": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_8_1/Add", "op": "_FusedMatMul", "input": ["StatefulPartitionedCall/sequential_3_1/dense_7_1/Relu", "StatefulPartitionedCall/sequential_3_1/dense_8_1/Cast/ReadVariableOp", "StatefulPartitionedCall/sequential_3_1/dense_8_1/Add/ReadVariableOp"], "device": "/device:CPU:0", "attr": {"transpose_a": {"b": false}, "transpose_b": {"b": false}, "fused_ops": {"list": {"s": ["Qmlhc0FkZA=="]}}, "num_args": {"i": "1"}, "leakyrelu_alpha": {"f": 0.2}, "epsilon": {"f": 0.0}, "T": {"type": "DT_FLOAT"}}}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_8_1/Sigmoid", "op": "Sigmoid", "input": ["StatefulPartitionedCall/sequential_3_1/dense_8_1/Add"], "attr": {"T": {"type": "DT_FLOAT"}}}, {"name": "Identity", "op": "Identity", "input": ["StatefulPartitionedCall/sequential_3_1/dense_8_1/Sigmoid"], "attr": {"T": {"type": "DT_FLOAT"}}}], "library": {}, "versions": {"producer": 2129}}, "weightsManifest": [{"paths": ["group1-shard1of1.bin"], "weights": [{"name": "StatefulPartitionedCall/sequential_3_1/dense_6_1/Cast/ReadVariableOp", "shape": [1024, 256], "dtype": "float32"}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_6_1/BiasAdd/ReadVariableOp", "shape": [256], "dtype": "float32"}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_7_1/Cast/ReadVariableOp", "shape": [256, 128], "dtype": "float32"}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_7_1/BiasAdd/ReadVariableOp", "shape": [128], "dtype": "float32"}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_8_1/Cast/ReadVariableOp", "shape": [128, 1], "dtype": "float32"}, {"name": "StatefulPartitionedCall/sequential_3_1/dense_8_1/Add/ReadVariableOp", "shape": [1], "dtype": "float32"}]}]};
+
+// Supabase storage URL for weights
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const WEIGHTS_PATH = 'ml-models/group1-shard1of1.bin';
+
 /**
  * Get the last loading error
  */
@@ -27,6 +34,69 @@ export function resetModelState(): void {
   isModelLoading = false;
   loadError = null;
   loadAttempts = 0;
+}
+
+/**
+ * Custom IOHandler to load model from inline JSON and Supabase storage weights
+ */
+function createModelIOHandler(): tf.io.IOHandler {
+  return {
+    async load(): Promise<tf.io.ModelArtifacts> {
+      console.log('[ML] Using custom IOHandler with inline model JSON');
+      
+      // Try multiple weight sources
+      const weightSources = [
+        `${SUPABASE_URL}/storage/v1/object/public/${WEIGHTS_PATH}`,
+        '/models/baby_cry_detector/group1-shard1of1.bin',
+        `${window.location.origin}/models/baby_cry_detector/group1-shard1of1.bin`,
+      ];
+      
+      let weightData: ArrayBuffer | null = null;
+      
+      for (const weightUrl of weightSources) {
+        try {
+          console.log(`[ML] Trying to fetch weights from: ${weightUrl}`);
+          const response = await fetch(weightUrl);
+          
+          if (!response.ok) {
+            console.log(`[ML] Weight fetch failed: ${response.status}`);
+            continue;
+          }
+          
+          const contentType = response.headers.get('content-type');
+          console.log(`[ML] Weight content-type: ${contentType}`);
+          
+          // Check if response is binary (not HTML)
+          if (contentType?.includes('text/html')) {
+            console.log('[ML] Received HTML instead of binary, trying next source');
+            continue;
+          }
+          
+          weightData = await response.arrayBuffer();
+          console.log(`[ML] Successfully loaded weights (${weightData.byteLength} bytes)`);
+          break;
+        } catch (e) {
+          console.log(`[ML] Failed to fetch from ${weightUrl}:`, e);
+        }
+      }
+      
+      if (!weightData) {
+        throw new Error('Could not load model weights from any source. Please upload group1-shard1of1.bin to ml-models storage bucket.');
+      }
+      
+      return {
+        modelTopology: MODEL_JSON.modelTopology,
+        format: MODEL_JSON.format,
+        generatedBy: MODEL_JSON.generatedBy,
+        convertedBy: MODEL_JSON.convertedBy,
+        weightSpecs: MODEL_JSON.weightsManifest[0].weights.map(w => ({
+          ...w,
+          dtype: w.dtype as 'float32',
+        })),
+        weightData,
+      };
+    }
+  };
 }
 
 /**
@@ -52,41 +122,8 @@ export async function loadModel(): Promise<void> {
     
     console.log(`[ML] Loading baby cry detection model (attempt ${loadAttempts}/${MAX_LOAD_ATTEMPTS})...`);
     
-    const modelUrl = '/models/baby_cry_detector/model.json';
-    
-    // Step 1: Verify model.json is accessible
-    console.log('[ML] Step 1: Verifying model.json accessibility...');
-    const testFetch = await fetch(modelUrl);
-    console.log('[ML] Fetch status:', testFetch.status, testFetch.statusText);
-    console.log('[ML] Content-Type:', testFetch.headers.get('content-type'));
-    
-    if (!testFetch.ok) {
-      throw new Error(`Model file not found: HTTP ${testFetch.status}`);
-    }
-    
-    // Step 2: Verify it's actually JSON
-    const contentType = testFetch.headers.get('content-type');
-    const responseText = await testFetch.text();
-    
-    if (!contentType?.includes('application/json') && !responseText.startsWith('{')) {
-      console.error('[ML] Response is not JSON. First 200 chars:', responseText.substring(0, 200));
-      throw new Error('Model file returned non-JSON response (possibly HTML 404 page)');
-    }
-    
-    // Step 3: Verify JSON is parseable
-    try {
-      const modelJson = JSON.parse(responseText);
-      console.log('[ML] Model JSON parsed successfully');
-      console.log('[ML] Model format:', modelJson.format);
-      console.log('[ML] Model topology nodes:', modelJson.modelTopology?.node?.length || 'N/A');
-    } catch (parseError) {
-      console.error('[ML] JSON parse error:', parseError);
-      throw new Error('Model JSON is malformed');
-    }
-    
-    // Step 4: Load with TensorFlow.js
-    console.log('[ML] Step 2: Loading model with TensorFlow.js...');
-    model = await tf.loadGraphModel(modelUrl);
+    // Use custom IOHandler to load from inline JSON + Supabase storage
+    model = await tf.loadGraphModel(createModelIOHandler());
     
     console.log('[ML] Model loaded successfully!');
     console.log('[ML] Model inputs:', model.inputs);
