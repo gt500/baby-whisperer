@@ -65,11 +65,96 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
     setLoadingAudioId(null);
   };
 
-  const handlePlayAudio = async (cryId: string, e: React.MouseEvent) => {
+  // Play actual baby cry sound from storage (for card grid)
+  const handlePlayCrySound = async (cryId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    // Stop current audio if playing the same one
-    if (playingAudioId === cryId || loadingAudioId === cryId) {
+    const audioKey = `cry-${cryId}`;
+    
+    // Stop if playing the same one
+    if (playingAudioId === audioKey || loadingAudioId === audioKey) {
+      stopAudio();
+      return;
+    }
+
+    // Stop any other playing audio
+    if (currentAudio) {
+      currentAudio.pause();
+      setCurrentAudio(null);
+    }
+
+    setLoadingAudioId(audioKey);
+    setPlayingAudioId(null);
+
+    try {
+      // Check for exact file match in storage
+      const { data: fileList } = await supabase.storage
+        .from('cry-audio')
+        .list('');
+
+      const exactFileName = `${cryId}.mp3`;
+      const fileExists = fileList?.some(file => file.name === exactFileName);
+
+      if (!fileExists) {
+        setLoadingAudioId(null);
+        toast({
+          title: "No Audio Available",
+          description: "Cry sample not yet uploaded. Tap card to hear description.",
+        });
+        return;
+      }
+
+      const { data } = supabase.storage
+        .from('cry-audio')
+        .getPublicUrl(exactFileName);
+      
+      const audioUrl = data.publicUrl;
+      console.log('Playing cry sound from storage:', audioUrl);
+
+      const audio = new Audio(audioUrl);
+      
+      audio.onended = () => {
+        setPlayingAudioId(null);
+        setLoadingAudioId(null);
+        setCurrentAudio(null);
+      };
+
+      audio.onerror = () => {
+        console.error('Audio playback error');
+        setPlayingAudioId(null);
+        setLoadingAudioId(null);
+        setCurrentAudio(null);
+        toast({
+          title: "Playback Error",
+          description: "Failed to play cry sound",
+          variant: "destructive",
+        });
+      };
+
+      setCurrentAudio(audio);
+      setLoadingAudioId(null);
+      setPlayingAudioId(audioKey);
+      await audio.play();
+    } catch (error) {
+      console.error('Error playing cry sound:', error);
+      setPlayingAudioId(null);
+      setLoadingAudioId(null);
+      toast({
+        title: "Error",
+        description: "Failed to load cry sound.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Play TTS description (for detail dialog)
+  const handlePlayTTS = async (cryId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const audioKey = `tts-${cryId}`;
+    
+    // Stop if playing the same one
+    if (playingAudioId === audioKey || loadingAudioId === audioKey) {
       stopAudio();
       return;
     }
@@ -83,55 +168,32 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
     const cry = cryDatabase.find((c) => c.id === cryId);
     if (!cry) return;
 
-    setLoadingAudioId(cryId);
+    setLoadingAudioId(audioKey);
     setPlayingAudioId(null);
 
     try {
-      // First, try to get actual cry audio from storage
-      // List all files and check for exact match (search does fuzzy matching)
-      const { data: fileList } = await supabase.storage
-        .from('cry-audio')
-        .list('');
+      const text = `${cry.name}. ${cry.description}. What to do: ${cry.solutions.join('. ')}`;
 
-      const exactFileName = `${cryId}.mp3`;
-      const fileExists = fileList?.some(file => file.name === exactFileName);
+      const { data, error } = await supabase.functions.invoke('text-to-speech', {
+        body: { text }
+      });
 
-      let audioUrl: string;
-
-      if (fileExists) {
-        // Use actual cry audio sample from storage
-        const { data } = supabase.storage
-          .from('cry-audio')
-          .getPublicUrl(exactFileName);
-        
-        audioUrl = data.publicUrl;
-        console.log('Playing audio from storage:', audioUrl);
-      } else {
-        // Fall back to TTS if no audio file exists
-        console.log('No audio file found, using TTS for:', cryId);
-        const text = `${cry.description}. Solutions: ${cry.solutions.join('. ')}`;
-
-        const { data, error } = await supabase.functions.invoke('text-to-speech', {
-          body: { text }
-        });
-
-        if (error) {
-          console.error('TTS error:', error);
-          throw error;
-        }
-
-        if (!data?.audioContent) {
-          throw new Error('No audio content returned from TTS');
-        }
-
-        // Convert base64 to audio
-        const audioBlob = new Blob(
-          [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
-          { type: 'audio/mpeg' }
-        );
-        audioUrl = URL.createObjectURL(audioBlob);
-        console.log('Playing TTS audio');
+      if (error) {
+        console.error('TTS error:', error);
+        throw error;
       }
+
+      if (!data?.audioContent) {
+        throw new Error('No audio content returned from TTS');
+      }
+
+      // Convert base64 to audio
+      const audioBlob = new Blob(
+        [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
+        { type: 'audio/mpeg' }
+      );
+      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('Playing TTS audio');
 
       const audio = new Audio(audioUrl);
       
@@ -139,37 +201,33 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
         setPlayingAudioId(null);
         setLoadingAudioId(null);
         setCurrentAudio(null);
-        if (audioUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(audioUrl);
-        }
+        URL.revokeObjectURL(audioUrl);
       };
 
-      audio.onerror = (err) => {
-        console.error('Audio playback error:', err);
+      audio.onerror = () => {
+        console.error('TTS playback error');
         setPlayingAudioId(null);
         setLoadingAudioId(null);
         setCurrentAudio(null);
-        if (audioUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(audioUrl);
-        }
+        URL.revokeObjectURL(audioUrl);
         toast({
           title: "Playback Error",
-          description: "Failed to play audio",
+          description: "Failed to play description",
           variant: "destructive",
         });
       };
 
       setCurrentAudio(audio);
       setLoadingAudioId(null);
-      setPlayingAudioId(cryId);
+      setPlayingAudioId(audioKey);
       await audio.play();
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('Error playing TTS:', error);
       setPlayingAudioId(null);
       setLoadingAudioId(null);
       toast({
         title: "Error",
-        description: "Failed to load audio. Please try again.",
+        description: "Failed to load audio description.",
         variant: "destructive",
       });
     }
@@ -257,17 +315,17 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
 
               <div className="flex items-start gap-2 text-sm text-muted-foreground mb-3">
                 <button
-                  onClick={(e) => playingAudioId === cry.id ? stopAudio(e) : handlePlayAudio(cry.id, e)}
+                  onClick={(e) => playingAudioId === `cry-${cry.id}` ? stopAudio(e) : handlePlayCrySound(cry.id, e)}
                   className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${
-                    playingAudioId === cry.id 
+                    playingAudioId === `cry-${cry.id}` 
                       ? 'bg-destructive/20 hover:bg-destructive/30' 
                       : 'hover:bg-primary/10'
                   }`}
-                  title={playingAudioId === cry.id ? 'Stop audio' : 'Play audio'}
+                  title={playingAudioId === `cry-${cry.id}` ? 'Stop cry sound' : 'Play cry sound'}
                 >
-                  {loadingAudioId === cry.id ? (
+                  {loadingAudioId === `cry-${cry.id}` ? (
                     <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                  ) : playingAudioId === cry.id ? (
+                  ) : playingAudioId === `cry-${cry.id}` ? (
                     <Square className="w-4 h-4 text-destructive fill-destructive" />
                   ) : (
                     <Volume2 className="w-4 h-4 text-primary" />
@@ -321,27 +379,27 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
                 <div className="bg-secondary/50 rounded-xl p-4">
                   <div className="flex items-start gap-2">
                     <button
-                      onClick={(e) => playingAudioId === selectedCry.id ? stopAudio(e) : handlePlayAudio(selectedCry.id, e)}
+                      onClick={(e) => playingAudioId === `tts-${selectedCry.id}` ? stopAudio(e) : handlePlayTTS(selectedCry.id, e)}
                       className={`flex-shrink-0 p-2 rounded-full transition-colors ${
-                        playingAudioId === selectedCry.id 
+                        playingAudioId === `tts-${selectedCry.id}` 
                           ? 'bg-destructive/20 hover:bg-destructive/30' 
                           : 'hover:bg-primary/10'
                       }`}
-                      title={playingAudioId === selectedCry.id ? 'Stop audio' : 'Play audio'}
+                      title={playingAudioId === `tts-${selectedCry.id}` ? 'Stop description' : 'Listen to description'}
                     >
-                      {loadingAudioId === selectedCry.id ? (
+                      {loadingAudioId === `tts-${selectedCry.id}` ? (
                         <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                      ) : playingAudioId === selectedCry.id ? (
+                      ) : playingAudioId === `tts-${selectedCry.id}` ? (
                         <Square className="w-5 h-5 text-destructive fill-destructive" />
                       ) : (
                         <Volume2 className="w-5 h-5 text-primary" />
                       )}
                     </button>
                     <div className="flex-1">
-                      <div className="font-semibold mb-1">Audio Pattern</div>
+                      <div className="font-semibold mb-1">Listen to Description</div>
                       <div className="text-sm text-muted-foreground">{selectedCry.audioPattern}</div>
                       <div className="text-xs text-primary mt-2">
-                        {playingAudioId === selectedCry.id ? 'Click to stop' : 'Click icon to hear description'}
+                        {playingAudioId === `tts-${selectedCry.id}` ? 'Click to stop' : 'Click to hear description & solutions'}
                       </div>
                     </div>
                   </div>
