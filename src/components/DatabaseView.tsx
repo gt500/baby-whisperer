@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -72,30 +73,41 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
 
     try {
       // First, try to get actual cry audio from storage
+      // List all files and check for exact match (search does fuzzy matching)
       const { data: fileList } = await supabase.storage
         .from('cry-audio')
-        .list('', {
-          search: `${cryId}.mp3`
-        });
+        .list('');
+
+      const exactFileName = `${cryId}.mp3`;
+      const fileExists = fileList?.some(file => file.name === exactFileName);
 
       let audioUrl: string;
 
-      if (fileList && fileList.length > 0) {
+      if (fileExists) {
         // Use actual cry audio sample from storage
         const { data } = supabase.storage
           .from('cry-audio')
-          .getPublicUrl(`${cryId}.mp3`);
+          .getPublicUrl(exactFileName);
         
         audioUrl = data.publicUrl;
+        console.log('Playing audio from storage:', audioUrl);
       } else {
         // Fall back to TTS if no audio file exists
+        console.log('No audio file found, using TTS for:', cryId);
         const text = `${cry.description}. Solutions: ${cry.solutions.join('. ')}`;
 
         const { data, error } = await supabase.functions.invoke('text-to-speech', {
           body: { text }
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error('TTS error:', error);
+          throw error;
+        }
+
+        if (!data?.audioContent) {
+          throw new Error('No audio content returned from TTS');
+        }
 
         // Convert base64 to audio
         const audioBlob = new Blob(
@@ -103,6 +115,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
           { type: 'audio/mpeg' }
         );
         audioUrl = URL.createObjectURL(audioBlob);
+        console.log('Playing TTS audio');
       }
 
       const audio = new Audio(audioUrl);
@@ -115,7 +128,8 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
         }
       };
 
-      audio.onerror = () => {
+      audio.onerror = (err) => {
+        console.error('Audio playback error:', err);
         setPlayingAudioId(null);
         setCurrentAudio(null);
         if (audioUrl.startsWith('blob:')) {
@@ -260,9 +274,12 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
           {selectedCry && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold mb-4">
+                <DialogTitle className="text-2xl font-bold mb-2">
                   {selectedCry.name}
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Details and solutions for {selectedCry.name} cry type
+                </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-6">
