@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const AdminUpload = () => {
   const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [uploadStatus, setUploadStatus] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
@@ -23,68 +24,83 @@ const AdminUpload = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const verifyAdminAccess = async (session: any) => {
+    const verifyAdminAccess = async (userId: string): Promise<boolean> => {
+      try {
+        const { data: roles, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('role', 'admin');
+
+        if (error) {
+          console.error('Error checking admin role:', error);
+          return false;
+        }
+
+        return roles && roles.length > 0;
+      } catch (err) {
+        console.error('Admin verification failed:', err);
+        return false;
+      }
+    };
+
+    const initializePage = async () => {
+      console.log('[AdminUpload] Initializing page...');
+      
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('[AdminUpload] Session error:', sessionError);
+        if (isMounted) {
+          setLoading(false);
+          navigate("/login");
+        }
+        return;
+      }
+
       if (!session) {
-        navigate("/login");
-        return false;
+        console.log('[AdminUpload] No session, redirecting to login');
+        if (isMounted) {
+          setLoading(false);
+          navigate("/login");
+        }
+        return;
       }
 
-      // Verify admin role
-      const { data: roles, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .eq('role', 'admin');
+      console.log('[AdminUpload] Session found, verifying admin access...');
+      const isAdmin = await verifyAdminAccess(session.user.id);
+      
+      if (!isMounted) return;
 
-      if (error) {
-        console.error('Error checking admin role:', error);
-        toast({
-          title: "Error",
-          description: "Failed to verify admin access",
-          variant: "destructive",
-        });
-        navigate('/');
-        return false;
-      }
-
-      if (!roles || roles.length === 0) {
+      if (!isAdmin) {
+        console.log('[AdminUpload] User is not admin');
         toast({
           title: "Access Denied",
           description: "Admin privileges required",
           variant: "destructive",
         });
+        setLoading(false);
         navigate('/');
-        return false;
+        return;
       }
 
-      return true;
-    };
-
-    const initializePage = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const isAdmin = await verifyAdminAccess(session);
-      if (!isAdmin || !isMounted) return;
-
-      setUser(session!.user);
+      console.log('[AdminUpload] Admin verified, loading files...');
+      setUser(session.user);
       await checkExistingFiles();
+      
+      if (isMounted) {
+        setLoading(false);
+      }
     };
 
     initializePage();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AdminUpload] Auth state changed:', event);
+      
       if (event === 'SIGNED_OUT') {
         navigate("/login");
         return;
-      }
-      
-      // Only re-verify on sign in events, not on token refresh
-      if (event === 'SIGNED_IN' && isMounted) {
-        const isAdmin = await verifyAdminAccess(session);
-        if (!isAdmin) return;
-        
-        setUser(session!.user);
-        await checkExistingFiles();
       }
     });
 
@@ -95,16 +111,24 @@ const AdminUpload = () => {
   }, [navigate, toast]);
 
   const checkExistingFiles = async () => {
+    console.log('[AdminUpload] Checking existing files in parallel...');
+    
+    // Parallel file checks - much faster than sequential
+    const checks = await Promise.all(
+      cryDatabase.map(async (cry) => {
+        const { data } = await supabase.storage
+          .from('cry-audio')
+          .list('', { search: `${cry.id}.mp3` });
+        return { id: cry.id, exists: (data && data.length > 0) || false };
+      })
+    );
+    
     const status: Record<string, boolean> = {};
+    checks.forEach((check) => {
+      status[check.id] = check.exists;
+    });
     
-    for (const cry of cryDatabase) {
-      const { data } = await supabase.storage
-        .from('cry-audio')
-        .list('', { search: `${cry.id}.mp3` });
-      
-      status[cry.id] = (data && data.length > 0) || false;
-    }
-    
+    console.log('[AdminUpload] File check complete:', Object.values(status).filter(Boolean).length, 'files found');
     setUploadStatus(status);
   };
 
@@ -280,10 +304,11 @@ const AdminUpload = () => {
   const totalCount = cryDatabase.length;
   const progress = (uploadedCount / totalCount) * 100;
 
-  if (!user) {
+  if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center flex-col gap-4">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Verifying admin access...</p>
       </div>
     );
   }

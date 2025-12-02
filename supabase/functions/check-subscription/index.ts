@@ -17,9 +17,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Use anon key for auth verification
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+  );
+
+  // Use service role key for database operations (bypasses RLS)
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
   try {
@@ -46,8 +53,8 @@ serve(async (req) => {
     if (customers.data.length === 0) {
       logStep("No customer found, returning free plan");
       
-      // Update subscription record
-      await supabaseClient
+      // Update subscription record using admin client (bypasses RLS)
+      await supabaseAdmin
         .from('subscriptions')
         .upsert({
           user_id: user.id,
@@ -106,8 +113,8 @@ serve(async (req) => {
       }
     }
 
-    // Update subscription in database
-    await supabaseClient
+    // Update subscription in database using admin client (bypasses RLS)
+    await supabaseAdmin
       .from('subscriptions')
       .upsert({
         user_id: user.id,
@@ -121,9 +128,9 @@ serve(async (req) => {
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' });
 
-    // Get daily detection count
-    const { data: canDetect } = await supabaseClient.rpc('can_detect_cry', { _user_id: user.id });
-    const { data: dailyCount } = await supabaseClient.rpc('get_daily_detection_count', { _user_id: user.id });
+    // Get daily detection count using admin client
+    const { data: canDetect } = await supabaseAdmin.rpc('can_detect_cry', { _user_id: user.id });
+    const { data: dailyCount } = await supabaseAdmin.rpc('get_daily_detection_count', { _user_id: user.id });
 
     return new Response(JSON.stringify({
       subscribed: planType !== 'free',
