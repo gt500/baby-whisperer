@@ -12,8 +12,24 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+const TTS_VOICES = [
+  { id: 'alloy', name: 'Alloy', description: 'Neutral' },
+  { id: 'nova', name: 'Nova', description: 'Warm female' },
+  { id: 'shimmer', name: 'Shimmer', description: 'Soft female' },
+  { id: 'echo', name: 'Echo', description: 'Male' },
+  { id: 'onyx', name: 'Onyx', description: 'Deep male' },
+  { id: 'fable', name: 'Fable', description: 'Expressive' },
+];
 
 interface DatabaseViewProps {
   onBack: () => void;
@@ -27,6 +43,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [loadingAudioId, setLoadingAudioId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState('nova');
 
   const filteredCries = cryDatabase.filter((cry) => {
     const matchesCategory = selectedCategory === "all" || cry.category === selectedCategory;
@@ -175,7 +192,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
       const text = `${cry.name}. ${cry.description}. What to do: ${cry.solutions.join('. ')}`;
 
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text }
+        body: { text, voice: selectedVoice }
       });
 
       if (error) {
@@ -377,6 +394,21 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
                 </div>
 
                 <div className="bg-secondary/50 rounded-xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-sm font-medium">Voice:</span>
+                    <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                      <SelectTrigger className="w-40 h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TTS_VOICES.map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name} - {voice.description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-start gap-2">
                     <button
                       onClick={(e) => playingAudioId === `tts-${selectedCry.id}` ? stopAudio(e) : handlePlayTTS(selectedCry.id, e)}

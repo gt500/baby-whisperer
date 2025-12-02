@@ -12,11 +12,15 @@ serve(async (req) => {
   }
 
   try {
-    const { text } = await req.json();
+    const { text, voice = 'alloy' } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
     }
+
+    // Valid OpenAI TTS voices
+    const validVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    const selectedVoice = validVoices.includes(voice) ? voice : 'alloy';
 
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
@@ -38,7 +42,7 @@ serve(async (req) => {
         body: JSON.stringify({
           model: 'tts-1',
           input: text,
-          voice: 'alloy',
+          voice: selectedVoice,
           response_format: 'mp3',
         }),
       }
