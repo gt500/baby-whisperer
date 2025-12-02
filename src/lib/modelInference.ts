@@ -1,15 +1,16 @@
 /**
  * TensorFlow.js Model Inference for Baby Cry Detection
- * Loads the Keras H5 model and performs inference
+ * Loads the Graph model and performs inference using extracted audio features
  */
 
 import * as tf from '@tensorflow/tfjs';
+import { extractAudioFeatures } from './audioFeatureExtraction';
 
-let model: tf.LayersModel | null = null;
+let model: tf.GraphModel | null = null;
 let isModelLoading = false;
 
 /**
- * Load the Keras H5 model
+ * Load the TensorFlow.js Graph model
  */
 export async function loadModel(): Promise<void> {
   if (model) {
@@ -28,52 +29,19 @@ export async function loadModel(): Promise<void> {
     isModelLoading = true;
     console.log('Loading baby cry detection model...');
     
-    // Try to load the converted TensorFlow.js model
-    // Note: The .h5 file must first be converted using:
-    // tensorflowjs_converter --input_format=keras baby_cry_detector.h5 public/models/baby_cry_detector
-    model = await tf.loadLayersModel('/models/baby_cry_detector/model.json');
+    // Load the Graph model (converted from Keras)
+    model = await tf.loadGraphModel('/models/baby_cry_detector/model.json');
     
     console.log('Model loaded successfully');
-    console.log('Input shape:', model.inputs[0].shape);
-    console.log('Output shape:', model.outputs[0].shape);
+    console.log('Model inputs:', model.inputs);
+    console.log('Model outputs:', model.outputs);
     
     isModelLoading = false;
   } catch (error) {
     isModelLoading = false;
     console.error('Error loading model:', error);
-    console.warn('⚠️ Model not found. The .h5 file needs to be converted to TensorFlow.js format.');
-    console.warn('Run: tensorflowjs_converter --input_format=keras baby_cry_detector.h5 public/models/baby_cry_detector');
-    // Don't throw - allow app to continue with fallback mode
+    console.warn('⚠️ Model loading failed. Running in fallback mode.');
   }
-}
-
-/**
- * Prepare audio input for the model
- * The model expects processed audio (likely YAMNet embeddings or raw waveform)
- */
-function prepareModelInput(audioData: Float32Array): tf.Tensor {
-  // Based on the training code, the model expects:
-  // - 16kHz audio
-  // - Normalized waveform
-  // - Shape: [1, samples]
-  
-  // Ensure audio is at least 1 second (16000 samples at 16kHz)
-  const minLength = 16000;
-  let processedAudio = audioData;
-  
-  if (audioData.length < minLength) {
-    // Pad with zeros
-    processedAudio = new Float32Array(minLength);
-    processedAudio.set(audioData);
-  } else if (audioData.length > minLength * 10) {
-    // Truncate if too long (max 10 seconds)
-    processedAudio = audioData.slice(0, minLength * 10);
-  }
-
-  // Create tensor with shape [1, samples]
-  const tensor = tf.tensor2d([Array.from(processedAudio)]);
-  
-  return tensor;
 }
 
 export interface InferenceResult {
@@ -93,17 +61,20 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
     await loadModel();
   }
 
-  // If model still not loaded (conversion needed), use fallback detection
+  // If model still not loaded, use fallback detection
   if (!model) {
     console.warn('Using fallback detection - model not available');
     return fallbackDetection(audioData);
   }
 
   try {
-    // Prepare input
-    const inputTensor = prepareModelInput(audioData);
+    // Extract 1024-dimensional features from audio
+    const features = extractAudioFeatures(audioData, 16000);
     
-    // Run inference
+    // Create input tensor with shape [1, 1024]
+    const inputTensor = tf.tensor2d([Array.from(features)], [1, 1024]);
+    
+    // Run inference using execute for graph models
     const output = model.predict(inputTensor) as tf.Tensor;
     const predictions = await output.data();
     
@@ -111,30 +82,18 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
     inputTensor.dispose();
     output.dispose();
 
-    // Binary classification output
-    // For sigmoid output: predictions[0] is probability of "cry" class
-    // For softmax output: predictions[0] = no_cry, predictions[1] = cry
-    let cryProbability: number;
-    let noCryProbability: number;
-    
-    if (predictions.length === 1) {
-      // Sigmoid output (single value)
-      cryProbability = predictions[0];
-      noCryProbability = 1 - cryProbability;
-    } else {
-      // Softmax output (two values: [no_cry, cry])
-      noCryProbability = predictions[0];
-      cryProbability = predictions[1];
-    }
+    // Model outputs sigmoid probability (0-1) for cry detection
+    // Single output: probability of crying
+    const cryProbability = predictions[0];
+    const noCryProbability = 1 - cryProbability;
     
     const isCrying = cryProbability > 0.5;
     const confidence = Math.max(cryProbability, noCryProbability);
 
-    console.log('Inference result:', {
+    console.log('ML Inference result:', {
       isCrying,
       confidence: (confidence * 100).toFixed(1) + '%',
       cryProb: (cryProbability * 100).toFixed(1) + '%',
-      noCryProb: (noCryProbability * 100).toFixed(1) + '%',
     });
 
     return {
@@ -165,8 +124,8 @@ function fallbackDetection(audioData: Float32Array): InferenceResult {
   const rms = Math.sqrt(sum / audioData.length);
   
   // Simulate detection based on audio energy
-  const isCrying = rms > 0.02; // Threshold for significant audio
-  const confidence = Math.min(0.65 + rms * 10, 0.95); // Simulated confidence
+  const isCrying = rms > 0.02;
+  const confidence = Math.min(0.65 + rms * 10, 0.95);
   
   return {
     isCrying,
@@ -191,14 +150,14 @@ export function disposeModel(): void {
 /**
  * Get model info (for debugging)
  */
-export function getModelInfo(): any {
+export function getModelInfo(): { loaded: boolean; inputShape?: number[]; outputShape?: number[] } | null {
   if (!model) {
     return null;
   }
 
   return {
     loaded: true,
-    inputShape: model.inputs?.[0]?.shape,
-    outputShape: model.outputs?.[0]?.shape,
+    inputShape: [1, 1024],
+    outputShape: [1, 1],
   };
 }
