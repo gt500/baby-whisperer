@@ -47,14 +47,15 @@ export default function AudioSegmentation() {
   const [silenceThreshold, setSilenceThreshold] = useState(0.02);
   const [minSegmentDuration, setMinSegmentDuration] = useState(0.3);
   const [showSettings, setShowSettings] = useState(false);
+  const [audioFileName, setAudioFileName] = useState<string>("");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const startTimeRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadAudio();
     return () => {
       if (audioContextRef.current) {
         audioContextRef.current.close();
@@ -68,10 +69,18 @@ export default function AudioSegmentation() {
     }
   }, [audioBuffer, segments, currentTime, suggestedBoundaries]);
 
-  const loadAudio = async () => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     try {
-      const response = await fetch("/source-audio/dunstan_sounds.mp3");
-      const arrayBuffer = await response.arrayBuffer();
+      setAudioFileName(file.name);
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Close existing audio context if any
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
       
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
@@ -79,10 +88,13 @@ export default function AudioSegmentation() {
       const buffer = await audioContext.decodeAudioData(arrayBuffer);
       setAudioBuffer(buffer);
       setDuration(buffer.duration);
-      toast.success("Audio loaded successfully");
+      setCurrentTime(0);
+      setSegments([]);
+      setSuggestedBoundaries([]);
+      toast.success(`Loaded: ${file.name}`);
     } catch (error) {
       console.error("Error loading audio:", error);
-      toast.error("Failed to load audio");
+      toast.error("Failed to load audio file");
     }
   };
 
@@ -440,6 +452,30 @@ export default function AudioSegmentation() {
 
         <Card className="p-6 mb-6">
           <div className="space-y-6">
+            {/* File Upload */}
+            <div>
+              <Label>Upload Audio File</Label>
+              <div className="flex items-center gap-4 mt-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Choose File
+                </Button>
+                {audioFileName && (
+                  <span className="text-sm text-muted-foreground">{audioFileName}</span>
+                )}
+              </div>
+            </div>
+
             <div>
               <Label>Waveform</Label>
               <canvas
