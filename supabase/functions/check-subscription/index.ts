@@ -47,25 +47,64 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
+    // FIRST: Check existing database subscription (for manually granted access)
+    const { data: existingSub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    logStep("Existing DB subscription", existingSub);
+
+    // If user has premium/lifetime in DB (manually granted), respect that
+    if (existingSub && (existingSub.plan_type === 'premium_monthly' || existingSub.plan_type === 'lifetime')) {
+      logStep("Found premium subscription in DB", { plan: existingSub.plan_type });
+      
+      // Get detection counts using admin client
+      const { data: canDetect } = await supabaseAdmin.rpc('can_detect_cry', { _user_id: user.id });
+      const { data: dailyCount } = await supabaseAdmin.rpc('get_daily_detection_count', { _user_id: user.id });
+
+      return new Response(JSON.stringify({
+        subscribed: true,
+        plan_type: existingSub.plan_type,
+        subscription_end: existingSub.current_period_end,
+        can_detect: true, // Premium users always can detect
+        daily_detections_used: dailyCount || 0,
+        daily_detections_limit: null // Unlimited for premium
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // Check Stripe for subscription
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
     if (customers.data.length === 0) {
-      logStep("No customer found, returning free plan");
+      logStep("No Stripe customer found, checking DB subscription");
       
-      // Update subscription record using admin client (bypasses RLS)
-      await supabaseAdmin
-        .from('subscriptions')
-        .upsert({
-          user_id: user.id,
-          plan_type: 'free',
-          status: 'active'
-        }, { onConflict: 'user_id' });
+      // Get detection counts for free plan
+      const { data: canDetect } = await supabaseAdmin.rpc('can_detect_cry', { _user_id: user.id });
+      const { data: dailyCount } = await supabaseAdmin.rpc('get_daily_detection_count', { _user_id: user.id });
+
+      // Only create free subscription if none exists
+      if (!existingSub) {
+        await supabaseAdmin
+          .from('subscriptions')
+          .insert({
+            user_id: user.id,
+            plan_type: 'free',
+            status: 'active'
+          });
+      }
       
       return new Response(JSON.stringify({ 
         subscribed: false,
-        plan_type: 'free',
-        daily_detections_remaining: null
+        plan_type: existingSub?.plan_type || 'free',
+        can_detect: canDetect ?? true,
+        daily_detections_used: dailyCount || 0,
+        daily_detections_limit: 5
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -83,7 +122,7 @@ serve(async (req) => {
     });
     
     const hasActiveSub = subscriptions.data.length > 0;
-    let planType = 'free';
+    let planType = existingSub?.plan_type || 'free';
     let subscriptionEnd = null;
     let stripeSubscriptionId = null;
     let stripePriceId = null;
@@ -132,13 +171,15 @@ serve(async (req) => {
     const { data: canDetect } = await supabaseAdmin.rpc('can_detect_cry', { _user_id: user.id });
     const { data: dailyCount } = await supabaseAdmin.rpc('get_daily_detection_count', { _user_id: user.id });
 
+    const isPremium = planType === 'premium_monthly' || planType === 'lifetime';
+
     return new Response(JSON.stringify({
-      subscribed: planType !== 'free',
+      subscribed: isPremium,
       plan_type: planType,
       subscription_end: subscriptionEnd,
-      can_detect: canDetect,
+      can_detect: isPremium ? true : canDetect,
       daily_detections_used: dailyCount || 0,
-      daily_detections_limit: planType === 'free' ? 5 : null
+      daily_detections_limit: isPremium ? null : 5
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
