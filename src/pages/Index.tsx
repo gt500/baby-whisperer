@@ -9,6 +9,7 @@ import DatabaseView from "@/components/DatabaseView";
 import ModelStatus from "@/components/ModelStatus";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { ConsentModal } from "@/components/ConsentModal";
+import { BabyHandPositions } from "@/components/BabyHandPositions";
 import { CryType, cryDatabase } from "@/data/cryDatabase";
 import { useConsent } from "@/hooks/useConsent";
 import { useCryContributions } from "@/hooks/useCryContributions";
@@ -129,6 +130,9 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
+      {/* Baby Hand Positions Side Tab */}
+      <BabyHandPositions />
+
       {/* Consent Modal */}
       <ConsentModal
         isOpen={showConsentModal}
