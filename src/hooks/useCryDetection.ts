@@ -68,11 +68,15 @@ export const useCryDetection = () => {
   const { toast } = useToast();
 
   const detectCry = useCallback(async (audioData: Float32Array): Promise<DetectionResult | null> => {
-    // Check subscription limits
-    if (!subscription?.can_detect) {
+    // Premium users always can detect
+    const isPremium = subscription?.plan_type === 'premium_monthly' || subscription?.plan_type === 'lifetime';
+    const canDetect = isPremium || subscription?.can_detect !== false;
+    
+    // Check subscription limits (only applies to free users)
+    if (!canDetect) {
       toast({
         title: "Daily Limit Reached",
-        description: `You've used all ${subscription?.daily_detections_limit} free detections today. Upgrade to Premium for unlimited access!`,
+        description: `You've used all ${subscription?.daily_detections_limit || 5} free detections today. Upgrade to Premium for unlimited access!`,
         variant: "destructive"
       });
       return null;
