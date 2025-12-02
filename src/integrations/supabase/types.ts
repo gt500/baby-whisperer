@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      consent_preferences: {
+        Row: {
+          audio_collection_consent: boolean
+          consent_date: string | null
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audio_collection_consent?: boolean
+          consent_date?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audio_collection_consent?: boolean
+          consent_date?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cry_contributions: {
+        Row: {
+          admin_notes: string | null
+          audio_url: string
+          baby_age_months: number | null
+          confidence: number | null
+          created_at: string
+          detected_cry_type: string | null
+          duration_seconds: number | null
+          id: string
+          is_correct: boolean | null
+          reviewed_at: string | null
+          status: string
+          user_id: string
+          user_verified_type: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          audio_url: string
+          baby_age_months?: number | null
+          confidence?: number | null
+          created_at?: string
+          detected_cry_type?: string | null
+          duration_seconds?: number | null
+          id?: string
+          is_correct?: boolean | null
+          reviewed_at?: string | null
+          status?: string
+          user_id: string
+          user_verified_type?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          audio_url?: string
+          baby_age_months?: number | null
+          confidence?: number | null
+          created_at?: string
+          detected_cry_type?: string | null
+          duration_seconds?: number | null
+          id?: string
+          is_correct?: boolean | null
+          reviewed_at?: string | null
+          status?: string
+          user_id?: string
+          user_verified_type?: string | null
+        }
+        Relationships: []
+      }
       cry_detections: {
         Row: {
           confidence: number | null

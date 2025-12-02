@@ -2,21 +2,23 @@ import { motion } from "framer-motion";
 import { Mic, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { recordAudio, audioBufferToFloat32Array, normalizeAudio, hasSignificantAudio } from "@/lib/audioProcessing";
 import { useCryDetection } from "@/hooks/useCryDetection";
 import { toast } from "sonner";
 
 interface ListeningViewProps {
   onCancel: () => void;
-  onDetectionComplete: (isCrying: boolean, confidence: number, cryType: string | null) => void;
+  onDetectionComplete: (isCrying: boolean, confidence: number, cryType: string | null, audioBlob?: Blob, durationSeconds?: number) => void;
+  shouldSaveAudio?: boolean;
 }
 
-const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) => {
+const ListeningView = ({ onCancel, onDetectionComplete, shouldSaveAudio = false }: ListeningViewProps) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>("Initializing...");
   const [isProcessing, setIsProcessing] = useState(false);
   const { detectCry, loadModel } = useCryDetection();
+  const audioDataRef = useRef<{ blob: Blob; duration: number } | null>(null);
 
   useEffect(() => {
     startDetection();
@@ -39,6 +41,14 @@ const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) =>
       setProgress(30);
       
       const recording = await recordAudio(4000); // 4 seconds
+      
+      // Store audio blob if we need to save it
+      if (shouldSaveAudio && recording.audioBlob) {
+        audioDataRef.current = {
+          blob: recording.audioBlob,
+          duration: recording.duration / 1000, // Convert to seconds
+        };
+      }
       
       // Simulate progress during recording
       const recordingInterval = setInterval(() => {
@@ -88,8 +98,15 @@ const ListeningView = ({ onCancel, onDetectionComplete }: ListeningViewProps) =>
       
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Return results
-      onDetectionComplete(result.isCrying, result.confidence, result.cryType);
+      // Return results with audio data if saving
+      const audioInfo = audioDataRef.current;
+      onDetectionComplete(
+        result.isCrying, 
+        result.confidence, 
+        result.cryType,
+        shouldSaveAudio && audioInfo ? audioInfo.blob : undefined,
+        shouldSaveAudio && audioInfo ? audioInfo.duration : undefined
+      );
       
     } catch (error: any) {
       console.error('Detection error:', error);
