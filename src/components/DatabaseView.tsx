@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Search, Volume2, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Volume2, Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCryId, setSelectedCryId] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [loadingAudioId, setLoadingAudioId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const filteredCries = cryDatabase.filter((cry) => {
@@ -53,23 +54,37 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
     high: "bg-destructive/20 text-destructive-foreground",
   };
 
+  const stopAudio = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      setCurrentAudio(null);
+    }
+    setPlayingAudioId(null);
+    setLoadingAudioId(null);
+  };
+
   const handlePlayAudio = async (cryId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    // Stop current audio if playing
+    // Stop current audio if playing the same one
+    if (playingAudioId === cryId || loadingAudioId === cryId) {
+      stopAudio();
+      return;
+    }
+
+    // Stop any other playing audio
     if (currentAudio) {
       currentAudio.pause();
       setCurrentAudio(null);
-      if (playingAudioId === cryId) {
-        setPlayingAudioId(null);
-        return;
-      }
     }
 
     const cry = cryDatabase.find((c) => c.id === cryId);
     if (!cry) return;
 
-    setPlayingAudioId(cryId);
+    setLoadingAudioId(cryId);
+    setPlayingAudioId(null);
 
     try {
       // First, try to get actual cry audio from storage
@@ -122,6 +137,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
       
       audio.onended = () => {
         setPlayingAudioId(null);
+        setLoadingAudioId(null);
         setCurrentAudio(null);
         if (audioUrl.startsWith('blob:')) {
           URL.revokeObjectURL(audioUrl);
@@ -131,6 +147,7 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
       audio.onerror = (err) => {
         console.error('Audio playback error:', err);
         setPlayingAudioId(null);
+        setLoadingAudioId(null);
         setCurrentAudio(null);
         if (audioUrl.startsWith('blob:')) {
           URL.revokeObjectURL(audioUrl);
@@ -143,10 +160,13 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
       };
 
       setCurrentAudio(audio);
+      setLoadingAudioId(null);
+      setPlayingAudioId(cryId);
       await audio.play();
     } catch (error) {
       console.error('Error playing audio:', error);
       setPlayingAudioId(null);
+      setLoadingAudioId(null);
       toast({
         title: "Error",
         description: "Failed to load audio. Please try again.",
@@ -237,12 +257,18 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
 
               <div className="flex items-start gap-2 text-sm text-muted-foreground mb-3">
                 <button
-                  onClick={(e) => handlePlayAudio(cry.id, e)}
-                  className="flex-shrink-0 p-1 rounded-full hover:bg-primary/10 transition-colors"
-                  disabled={playingAudioId === cry.id}
+                  onClick={(e) => playingAudioId === cry.id ? stopAudio(e) : handlePlayAudio(cry.id, e)}
+                  className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${
+                    playingAudioId === cry.id 
+                      ? 'bg-destructive/20 hover:bg-destructive/30' 
+                      : 'hover:bg-primary/10'
+                  }`}
+                  title={playingAudioId === cry.id ? 'Stop audio' : 'Play audio'}
                 >
-                  {playingAudioId === cry.id ? (
+                  {loadingAudioId === cry.id ? (
                     <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                  ) : playingAudioId === cry.id ? (
+                    <Square className="w-4 h-4 text-destructive fill-destructive" />
                   ) : (
                     <Volume2 className="w-4 h-4 text-primary" />
                   )}
@@ -295,12 +321,18 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
                 <div className="bg-secondary/50 rounded-xl p-4">
                   <div className="flex items-start gap-2">
                     <button
-                      onClick={(e) => handlePlayAudio(selectedCry.id, e)}
-                      className="flex-shrink-0 p-2 rounded-full hover:bg-primary/10 transition-colors"
-                      disabled={playingAudioId === selectedCry.id}
+                      onClick={(e) => playingAudioId === selectedCry.id ? stopAudio(e) : handlePlayAudio(selectedCry.id, e)}
+                      className={`flex-shrink-0 p-2 rounded-full transition-colors ${
+                        playingAudioId === selectedCry.id 
+                          ? 'bg-destructive/20 hover:bg-destructive/30' 
+                          : 'hover:bg-primary/10'
+                      }`}
+                      title={playingAudioId === selectedCry.id ? 'Stop audio' : 'Play audio'}
                     >
-                      {playingAudioId === selectedCry.id ? (
+                      {loadingAudioId === selectedCry.id ? (
                         <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                      ) : playingAudioId === selectedCry.id ? (
+                        <Square className="w-5 h-5 text-destructive fill-destructive" />
                       ) : (
                         <Volume2 className="w-5 h-5 text-primary" />
                       )}
@@ -308,7 +340,9 @@ const DatabaseView = ({ onBack }: DatabaseViewProps) => {
                     <div className="flex-1">
                       <div className="font-semibold mb-1">Audio Pattern</div>
                       <div className="text-sm text-muted-foreground">{selectedCry.audioPattern}</div>
-                      <div className="text-xs text-primary mt-2">Click icon to hear description</div>
+                      <div className="text-xs text-primary mt-2">
+                        {playingAudioId === selectedCry.id ? 'Click to stop' : 'Click icon to hear description'}
+                      </div>
                     </div>
                   </div>
                 </div>
