@@ -21,21 +21,31 @@ const AdminUpload = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check authentication and admin role
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+    let isMounted = true;
+
+    const verifyAdminAccess = async (session: any) => {
       if (!session) {
         navigate("/login");
-        return;
+        return false;
       }
 
       // Verify admin role
-      const { data: roles } = await supabase
+      const { data: roles, error } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', session.user.id)
         .eq('role', 'admin');
+
+      if (error) {
+        console.error('Error checking admin role:', error);
+        toast({
+          title: "Error",
+          description: "Failed to verify admin access",
+          variant: "destructive",
+        });
+        navigate('/');
+        return false;
+      }
 
       if (!roles || roles.length === 0) {
         toast({
@@ -44,42 +54,44 @@ const AdminUpload = () => {
           variant: "destructive",
         });
         navigate('/');
-        return;
+        return false;
       }
 
-      setUser(session.user);
-      checkExistingFiles();
+      return true;
     };
 
-    checkAuth();
+    const initializePage = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const isAdmin = await verifyAdminAccess(session);
+      if (!isAdmin || !isMounted) return;
+
+      setUser(session!.user);
+      await checkExistingFiles();
+    };
+
+    initializePage();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!session) {
+      if (event === 'SIGNED_OUT') {
         navigate("/login");
         return;
       }
-
-      // Verify admin role on auth state change
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .eq('role', 'admin');
-
-      if (!roles || roles.length === 0) {
-        toast({
-          title: "Access Denied",
-          description: "Admin privileges required",
-          variant: "destructive",
-        });
-        navigate('/');
-        return;
+      
+      // Only re-verify on sign in events, not on token refresh
+      if (event === 'SIGNED_IN' && isMounted) {
+        const isAdmin = await verifyAdminAccess(session);
+        if (!isAdmin) return;
+        
+        setUser(session!.user);
+        await checkExistingFiles();
       }
-
-      setUser(session.user);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate, toast]);
 
   const checkExistingFiles = async () => {
