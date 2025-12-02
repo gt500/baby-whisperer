@@ -305,7 +305,7 @@ export default function AudioSegmentation() {
 
   const detectSilence = () => {
     if (!audioBuffer) {
-      toast.error("No audio loaded");
+      toast.error("Please upload an audio file first");
       return;
     }
 
@@ -324,23 +324,29 @@ export default function AudioSegmentation() {
       energyLevels.push(rms);
     }
 
+    console.log("Energy stats:", {
+      min: Math.min(...energyLevels),
+      max: Math.max(...energyLevels),
+      avg: energyLevels.reduce((a, b) => a + b, 0) / energyLevels.length,
+      threshold: silenceThreshold
+    });
+
     // Detect transitions from silence to sound and vice versa
     let inSound = false;
     for (let i = 1; i < energyLevels.length; i++) {
       const time = (i * windowSize) / sampleRate;
-      const prevEnergy = energyLevels[i - 1];
       const currEnergy = energyLevels[i];
 
       if (!inSound && currEnergy > silenceThreshold) {
-        // Transition from silence to sound
         boundaries.push({ time, type: "start" });
         inSound = true;
       } else if (inSound && currEnergy < silenceThreshold) {
-        // Transition from sound to silence
         boundaries.push({ time, type: "end" });
         inSound = false;
       }
     }
+
+    console.log("Raw boundaries found:", boundaries.length);
 
     // Filter out very short segments
     const filteredBoundaries: SuggestedBoundary[] = [];
@@ -357,7 +363,12 @@ export default function AudioSegmentation() {
     }
 
     setSuggestedBoundaries(filteredBoundaries);
-    toast.success(`Found ${filteredBoundaries.length / 2} potential segments`);
+    
+    if (filteredBoundaries.length === 0) {
+      toast.error("No segments found. Try lowering the silence threshold.");
+    } else {
+      toast.success(`Found ${filteredBoundaries.length / 2} potential segments`);
+    }
   };
 
   const autoSegment = () => {
