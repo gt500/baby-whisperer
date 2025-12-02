@@ -3,11 +3,16 @@ import { CheckCircle2, Volume2, AlertCircle, Home, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CryType } from "@/data/cryDatabase";
 import { Badge } from "@/components/ui/badge";
+import { FeedbackPrompt } from "./FeedbackPrompt";
+import { useState } from "react";
 
 interface ResultsViewProps {
   cry: CryType;
   onListenAgain: () => void;
   onBack: () => void;
+  contributionId?: string | null;
+  onFeedbackSubmit?: (isCorrect: boolean, correctedType?: string) => void;
+  showFeedback?: boolean;
 }
 
 const intensityColors = {
@@ -27,7 +32,23 @@ const categoryColors = {
   fear: "bg-[hsl(0,60%,90%)] text-[hsl(0,60%,30%)]",
 };
 
-const ResultsView = ({ cry, onListenAgain, onBack }: ResultsViewProps) => {
+const ResultsView = ({ 
+  cry, 
+  onListenAgain, 
+  onBack, 
+  contributionId,
+  onFeedbackSubmit,
+  showFeedback = false 
+}: ResultsViewProps) => {
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+
+  const handleFeedback = (isCorrect: boolean, correctedType?: string) => {
+    if (onFeedbackSubmit) {
+      onFeedbackSubmit(isCorrect, correctedType);
+    }
+    setFeedbackSubmitted(true);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -122,6 +143,31 @@ const ResultsView = ({ cry, onListenAgain, onBack }: ResultsViewProps) => {
             </div>
           </div>
         </motion.div>
+
+        {/* Feedback Prompt */}
+        {showFeedback && contributionId && !feedbackSubmitted && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.45 }}
+          >
+            <FeedbackPrompt
+              detectedCryType={cry.id}
+              onSubmit={handleFeedback}
+              onSkip={() => setFeedbackSubmitted(true)}
+            />
+          </motion.div>
+        )}
+
+        {feedbackSubmitted && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-success/10 rounded-2xl p-4 text-center border border-success/20"
+          >
+            <p className="text-success font-medium">Thank you for your feedback!</p>
+          </motion.div>
+        )}
 
         {/* Action Buttons */}
         <motion.div

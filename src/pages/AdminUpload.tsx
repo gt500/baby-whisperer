@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Baby, Upload, CheckCircle2, XCircle, Play, Trash2, LogOut, Loader2, FolderUp, AlertCircle, Scissors } from "lucide-react";
+import { Baby, Upload, CheckCircle2, XCircle, Play, Trash2, LogOut, Loader2, FolderUp, AlertCircle, Scissors, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { cryDatabase, categories } from "@/data/cryDatabase";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ContributionsReview } from "@/components/ContributionsReview";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const AdminUpload = () => {
   const [user, setUser] = useState<any>(null);
@@ -405,8 +407,18 @@ const AdminUpload = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Progress Overview */}
-        <motion.div
+        <Tabs defaultValue="audio" className="space-y-6">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="audio">Audio Management</TabsTrigger>
+            <TabsTrigger value="contributions">
+              <Users className="w-4 h-4 mr-2" />
+              Contributions
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="audio" className="space-y-8">
+            {/* Progress Overview */}
+            <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-card rounded-3xl p-8 shadow-card mb-8"
@@ -735,6 +747,19 @@ const AdminUpload = () => {
             </motion.div>
           );
         })}
+          </TabsContent>
+
+          <TabsContent value="contributions">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-card rounded-3xl p-8 shadow-card"
+            >
+              <h2 className="text-2xl font-bold mb-6">User Contributions</h2>
+              <ContributionsReview />
+            </motion.div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

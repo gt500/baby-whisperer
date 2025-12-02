@@ -7,13 +7,24 @@ import ResultsView from "@/components/ResultsView";
 import DatabaseView from "@/components/DatabaseView";
 import ModelStatus from "@/components/ModelStatus";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
+import { ConsentModal } from "@/components/ConsentModal";
 import { CryType, cryDatabase } from "@/data/cryDatabase";
+import { useConsent } from "@/hooks/useConsent";
+import { useCryContributions } from "@/hooks/useCryContributions";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 type AppState = "home" | "listening" | "results" | "database" | "about";
 
 const Index = () => {
   const [appState, setAppState] = useState<AppState>("home");
   const [detectedCry, setDetectedCry] = useState<CryType | null>(null);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [pendingContributionId, setPendingContributionId] = useState<string | null>(null);
+  
+  const { user } = useAuth();
+  const { hasConsent, isLoading: consentLoading, setConsent } = useConsent();
+  const { uploadContribution, submitFeedback } = useCryContributions();
 
   // Model health check on mount
   useEffect(() => {
@@ -43,34 +54,87 @@ const Index = () => {
   }, []);
 
   const startListening = () => {
+    // If user is logged in and hasn't given consent yet, show the modal
+    if (user && !hasConsent && !consentLoading) {
+      setShowConsentModal(true);
+    } else {
+      setAppState("listening");
+    }
+  };
+
+  const handleConsentAccept = async () => {
+    await setConsent(true);
+    setShowConsentModal(false);
+    toast.success("Thank you for helping improve Baby Whisperer!");
     setAppState("listening");
   };
 
-  const handleDetectionComplete = (isCrying: boolean, confidence: number, cryType: string | null) => {
+  const handleConsentDecline = () => {
+    setShowConsentModal(false);
+    setAppState("listening");
+  };
+
+  const handleDetectionComplete = async (
+    isCrying: boolean, 
+    confidence: number, 
+    cryType: string | null,
+    audioBlob?: Blob,
+    durationSeconds?: number
+  ) => {
     if (!isCrying || !cryType) {
-      // No cry detected
       setAppState("home");
       return;
     }
 
     // Find the detected cry type in our database
     const detectedCryData = cryDatabase.find(cry => cry.id === cryType);
-    if (detectedCryData) {
-      setDetectedCry(detectedCryData);
-      setAppState("results");
-    } else {
-      // Fallback if cry type not found
+    if (!detectedCryData) {
       setAppState("home");
+      return;
+    }
+
+    // Upload contribution if user gave consent
+    let contributionId: string | null = null;
+    if (user && hasConsent && audioBlob && durationSeconds) {
+      contributionId = await uploadContribution({
+        audioBlob,
+        detectedCryType: cryType,
+        confidence,
+        durationSeconds,
+      });
+      setPendingContributionId(contributionId);
+    }
+
+    setDetectedCry(detectedCryData);
+    setAppState("results");
+  };
+
+  const handleFeedbackSubmit = async (isCorrect: boolean, correctedType?: string) => {
+    if (pendingContributionId) {
+      await submitFeedback({
+        contributionId: pendingContributionId,
+        isCorrect,
+        userVerifiedType: correctedType,
+      });
+      toast.success("Feedback recorded. Thank you!");
     }
   };
 
   const resetToHome = () => {
     setAppState("home");
     setDetectedCry(null);
+    setPendingContributionId(null);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
+      {/* Consent Modal */}
+      <ConsentModal
+        isOpen={showConsentModal}
+        onAccept={handleConsentAccept}
+        onDecline={handleConsentDecline}
+      />
+
       <AnimatePresence mode="wait">
         {appState === "home" && (
           <motion.div
@@ -207,6 +271,7 @@ const Index = () => {
             key="listening" 
             onCancel={resetToHome}
             onDetectionComplete={handleDetectionComplete}
+            shouldSaveAudio={user !== null && hasConsent}
           />
         )}
 
@@ -216,6 +281,9 @@ const Index = () => {
             cry={detectedCry}
             onListenAgain={startListening}
             onBack={resetToHome}
+            contributionId={pendingContributionId}
+            onFeedbackSubmit={handleFeedbackSubmit}
+            showFeedback={!!pendingContributionId}
           />
         )}
 
@@ -281,8 +349,10 @@ const Index = () => {
                 <section className="space-y-3">
                   <h2 className="text-xl font-semibold">Privacy & Safety</h2>
                   <p className="text-muted-foreground leading-relaxed">
-                    Audio is processed on-device when possible. No recordings are stored or shared. 
-                    This app is a tool to help parents - always consult your pediatrician for medical concerns.
+                    Audio is processed on-device when possible. No recordings are stored or shared 
+                    without your explicit consent. You can opt-in to help improve our AI by contributing 
+                    anonymized cry recordings. This app is a tool to help parents - always consult your 
+                    pediatrician for medical concerns.
                   </p>
                 </section>
               </div>
