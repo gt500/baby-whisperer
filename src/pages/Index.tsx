@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Volume2, Baby, BookOpen, Info, ChevronRight } from "lucide-react";
+import { Mic, Baby, BookOpen, Info, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ListeningView from "@/components/ListeningView";
 import ResultsView from "@/components/ResultsView";
@@ -13,6 +13,33 @@ type AppState = "home" | "listening" | "results" | "database" | "about";
 const Index = () => {
   const [appState, setAppState] = useState<AppState>("home");
   const [detectedCry, setDetectedCry] = useState<CryType | null>(null);
+
+  // Model health check on mount
+  useEffect(() => {
+    const checkModelFiles = async () => {
+      try {
+        const response = await fetch('/models/baby_cry_detector/model.json');
+        console.log('[Index] Model file check - Status:', response.status);
+        console.log('[Index] Content-Type:', response.headers.get('content-type'));
+        
+        if (response.ok) {
+          const text = await response.text();
+          try {
+            JSON.parse(text);
+            console.log('[Index] Model JSON is valid and accessible');
+          } catch {
+            console.error('[Index] Model file is not valid JSON. Content preview:', text.substring(0, 100));
+          }
+        } else {
+          console.error('[Index] Model file not accessible:', response.status);
+        }
+      } catch (error) {
+        console.error('[Index] Failed to check model file:', error);
+      }
+    };
+    
+    checkModelFiles();
+  }, []);
 
   const startListening = () => {
     setAppState("listening");

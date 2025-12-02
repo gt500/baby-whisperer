@@ -8,9 +8,29 @@ import { extractAudioFeatures } from './audioFeatureExtraction';
 
 let model: tf.GraphModel | null = null;
 let isModelLoading = false;
+let loadError: string | null = null;
+let loadAttempts = 0;
+const MAX_LOAD_ATTEMPTS = 3;
 
 /**
- * Load the TensorFlow.js Graph model
+ * Get the last loading error
+ */
+export function getLoadError(): string | null {
+  return loadError;
+}
+
+/**
+ * Reset model state for retry
+ */
+export function resetModelState(): void {
+  model = null;
+  isModelLoading = false;
+  loadError = null;
+  loadAttempts = 0;
+}
+
+/**
+ * Load the TensorFlow.js Graph model with retry mechanism
  */
 export async function loadModel(): Promise<void> {
   if (model) {
@@ -27,20 +47,69 @@ export async function loadModel(): Promise<void> {
 
   try {
     isModelLoading = true;
-    console.log('Loading baby cry detection model...');
+    loadError = null;
+    loadAttempts++;
     
-    // Load the Graph model (converted from Keras)
-    model = await tf.loadGraphModel('/models/baby_cry_detector/model.json');
+    console.log(`[ML] Loading baby cry detection model (attempt ${loadAttempts}/${MAX_LOAD_ATTEMPTS})...`);
     
-    console.log('Model loaded successfully');
-    console.log('Model inputs:', model.inputs);
-    console.log('Model outputs:', model.outputs);
+    const modelUrl = '/models/baby_cry_detector/model.json';
+    
+    // Step 1: Verify model.json is accessible
+    console.log('[ML] Step 1: Verifying model.json accessibility...');
+    const testFetch = await fetch(modelUrl);
+    console.log('[ML] Fetch status:', testFetch.status, testFetch.statusText);
+    console.log('[ML] Content-Type:', testFetch.headers.get('content-type'));
+    
+    if (!testFetch.ok) {
+      throw new Error(`Model file not found: HTTP ${testFetch.status}`);
+    }
+    
+    // Step 2: Verify it's actually JSON
+    const contentType = testFetch.headers.get('content-type');
+    const responseText = await testFetch.text();
+    
+    if (!contentType?.includes('application/json') && !responseText.startsWith('{')) {
+      console.error('[ML] Response is not JSON. First 200 chars:', responseText.substring(0, 200));
+      throw new Error('Model file returned non-JSON response (possibly HTML 404 page)');
+    }
+    
+    // Step 3: Verify JSON is parseable
+    try {
+      const modelJson = JSON.parse(responseText);
+      console.log('[ML] Model JSON parsed successfully');
+      console.log('[ML] Model format:', modelJson.format);
+      console.log('[ML] Model topology nodes:', modelJson.modelTopology?.node?.length || 'N/A');
+    } catch (parseError) {
+      console.error('[ML] JSON parse error:', parseError);
+      throw new Error('Model JSON is malformed');
+    }
+    
+    // Step 4: Load with TensorFlow.js
+    console.log('[ML] Step 2: Loading model with TensorFlow.js...');
+    model = await tf.loadGraphModel(modelUrl);
+    
+    console.log('[ML] Model loaded successfully!');
+    console.log('[ML] Model inputs:', model.inputs);
+    console.log('[ML] Model outputs:', model.outputs);
     
     isModelLoading = false;
+    loadError = null;
   } catch (error) {
     isModelLoading = false;
-    console.error('Error loading model:', error);
-    console.warn('⚠️ Model loading failed. Running in fallback mode.');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    loadError = errorMessage;
+    console.error('[ML] Error loading model:', errorMessage);
+    
+    // Retry with exponential backoff
+    if (loadAttempts < MAX_LOAD_ATTEMPTS) {
+      const delay = Math.pow(2, loadAttempts) * 1000; // 2s, 4s, 8s
+      console.log(`[ML] Retrying in ${delay/1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      isModelLoading = false; // Reset for retry
+      return loadModel();
+    }
+    
+    console.warn('[ML] Max attempts reached. Running in fallback mode.');
   }
 }
 
@@ -63,7 +132,7 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
 
   // If model still not loaded, use fallback detection
   if (!model) {
-    console.warn('Using fallback detection - model not available');
+    console.warn('[ML] Using fallback detection - model not available');
     return fallbackDetection(audioData);
   }
 
@@ -90,7 +159,7 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
     const isCrying = cryProbability > 0.5;
     const confidence = Math.max(cryProbability, noCryProbability);
 
-    console.log('ML Inference result:', {
+    console.log('[ML] Inference result:', {
       isCrying,
       confidence: (confidence * 100).toFixed(1) + '%',
       cryProb: (cryProbability * 100).toFixed(1) + '%',
@@ -105,8 +174,8 @@ export async function detectCry(audioData: Float32Array): Promise<InferenceResul
       },
     };
   } catch (error) {
-    console.error('Error during inference:', error);
-    console.warn('Falling back to simulated detection');
+    console.error('[ML] Error during inference:', error);
+    console.warn('[ML] Falling back to simulated detection');
     return fallbackDetection(audioData);
   }
 }
@@ -150,7 +219,14 @@ export function disposeModel(): void {
 /**
  * Get model info (for debugging)
  */
-export function getModelInfo(): { loaded: boolean; inputShape?: number[]; outputShape?: number[] } | null {
+export function getModelInfo(): { loaded: boolean; inputShape?: number[]; outputShape?: number[]; error?: string } | null {
+  if (loadError) {
+    return {
+      loaded: false,
+      error: loadError,
+    };
+  }
+  
   if (!model) {
     return null;
   }
