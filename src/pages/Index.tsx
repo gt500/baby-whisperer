@@ -6,6 +6,7 @@ import ListeningView from "@/components/ListeningView";
 import ResultsView from "@/components/ResultsView";
 import DatabaseView from "@/components/DatabaseView";
 import ModelStatus from "@/components/ModelStatus";
+import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { CryType, cryDatabase } from "@/data/cryDatabase";
 
 type AppState = "home" | "listening" | "results" | "database" | "about";
@@ -111,6 +112,11 @@ const Index = () => {
                 <ModelStatus />
               </motion.div>
             </header>
+
+            {/* Subscription Banner */}
+            <div className="px-6 max-w-md mx-auto w-full">
+              <SubscriptionBanner />
+            </div>
 
             {/* Main Content */}
             <main className="flex-1 flex flex-col items-center justify-center px-6 pb-20">
